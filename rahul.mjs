@@ -1107,4 +1107,5 @@ console.log(`${convertToCustomFont('send .admin in dm to become admin')} 🎀`);
 console.log(`${convertToCustomFont('send .cs hello nc1 50 to test')} 🌀`);
 console.log(`${convertToCustomFont('send .triple1 raid for real triple attack')} 🔥`);
 console.log(`${convertToCustomFont('send .cwords to see constant texts')} 📝`);
+
 console.log(`${convertToCustomFont('enjoy the power of rouges bot')} ⚡\n`);
