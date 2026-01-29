@@ -7,7 +7,7 @@ import json
 import asyncio
 from playwright.async_api import async_playwright
 
-MOBILE_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+MOBILE_UA = "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36"
 MOBILE_VIEWPORT = {"width": 412, "height": 915}
 
 LAUNCH_ARGS = [
@@ -129,11 +129,7 @@ async def init_page(page, url, dm_selector):
     for init_try in range(3):
         try:
             await page.goto("https://www.instagram.com/", timeout=60000)
-            await page.keyboard.press('Control+L')
-            delay_ms = 1000 / (len(url) - 1) if len(url) > 1 else 0
-            await page.keyboard.type(url, delay=delay_ms)
-            async with page.expect_navigation(timeout=60000):
-                await page.keyboard.press('Enter')
+            await page.goto(url, timeout=60000)
             await page.wait_for_selector(dm_selector, timeout=30000)
             init_success = True
             break
@@ -156,8 +152,7 @@ async def sender(tab_id, args, messages, context, page):
         if elapsed >= 60:
             try:
                 print(f"Tab {tab_id} reloading thread after {elapsed:.1f}s")
-                async with current_page.expect_navigation(timeout=60000):
-                    await current_page.keyboard.press('F5')
+                await current_page.reload(timeout=60000)
                 await current_page.wait_for_selector(dm_selector, timeout=30000)
             except Exception as reload_e:
                 print(f"Tab {tab_id} reload failed after {elapsed:.1f}s: {reload_e}")
