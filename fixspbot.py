@@ -96,7 +96,7 @@ async def playwright_login_and_save_state(username: str, password: str, user_id:
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
-            headless=False,
+            headless=True,
             args=[
                 "--disable-gpu",
                 "--no-sandbox",
@@ -807,6 +807,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
  /threads 🔢 <1-5> - Set number of threads
  /viewpref ⚙️ - View preferences
  /attack 💥 - Start sending messages
+ /pattack 💥 - Start sending messages (manual thread URL)
  /stop 🛑 <pid/all> - Stop tasks
  /task 📋 - View ongoing tasks
  /logout 🚪 <username> - Logout and remove account
@@ -834,7 +835,7 @@ async def psid_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
 def playwright_test_session(sessionid: str):
     def run(p):
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context()
         context.add_cookies([{
             "name": "sessionid",
@@ -889,15 +890,6 @@ async def psid_get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     with open(pw_file, "w") as f:
         json.dump(state, f, indent=2)
 
-    # Save Instagrapi
-    cl = Client()
-    cl.set_settings({"authorization_data": {"sessionid": sessionid}})
-    cl.private._authorization_data = {"sessionid": sessionid}
-    info = cl.account_info()
-    cl.user_id = info.pk
-    ig_file = f"sessions/{user_id}_{username}_session.json"
-    cl.dump_settings(ig_file)
-
     # Save in bot memory
     if user_id not in users_data:
         users_data[user_id] = {'accounts': [], 'default': None, 'pairs': None, 'switch_minutes': 10, 'threads': 1}
@@ -910,7 +902,7 @@ async def psid_get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     users_data[user_id]['default'] = len(users_data[user_id]['accounts']) - 1
     save_user_data(user_id, users_data[user_id])
 
-    await update.message.reply_text(f"🎉 Session saved!\nUser: {username}\nPlaywright + Instagrapi ready.")
+    await update.message.reply_text(f"🎉 Session saved!\nUser: {username}\nPlaywright ready.")
     return ConversationHandler.END
     
 
@@ -1377,6 +1369,7 @@ async def viewpref(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(msg)
 
 MODE, SELECT_GC, TARGET, MESSAGES = range(4)
+P_MODE, P_TARGET_DISPLAY, P_THREAD_URL, P_MESSAGES = range(4)
 
 async def attack_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
@@ -1550,6 +1543,200 @@ async def get_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     # --- Below part unchanged (keeps rotation, task limits, etc.) ---
 
     # --- Below part unchanged (keeps rotation, task limits, etc.) ---
+    data = users_data[user_id]
+    pairs = data.get('pairs')
+    pair_list = pairs['list'] if pairs else [data['accounts'][data['default']]['ig_username']]
+    if len(pair_list) == 1:
+        warning = "⚠️ Warning: You may get chat ban if you use a single account too long. Use /pair to make multi-account rotation.\n\n"
+    else:
+        warning = ""
+    switch_minutes = data.get('switch_minutes', 10)
+    threads_n = data.get('threads', 1)
+    tasks = users_tasks.get(user_id, [])
+    running_msg = [t for t in tasks if t.get('type') == 'message_attack' and t['status'] == 'running' and t['proc'].poll() is None]
+    if len(running_msg) >= 5:
+        await update.message.reply_text("⚠️ Max 5 message attacks running. Stop one first. ⚠️")
+        if os.path.exists(names_file):
+            os.remove(names_file)
+        return ConversationHandler.END
+
+    thread_url = context.user_data['thread_url']
+    target_display = context.user_data['target_display']
+    target_mode = context.user_data['mode']
+    start_idx = pairs['default_index'] if pairs else 0
+    start_u = pair_list[start_idx]
+    start_acc = next(acc for acc in data['accounts'] if acc['ig_username'] == start_u)
+    start_pass = start_acc['password']
+    start_u = start_u.strip().lower()
+    state_file = f"sessions/{user_id}_{start_u}_state.json"
+    if not os.path.exists(state_file):
+        with open(state_file, 'w') as f:
+            json.dump(start_acc['storage_state'], f)
+
+    cmd = [
+        "python3", "msg.py",
+        "--username", start_u,
+        "--password", start_pass,
+        "--thread-url", thread_url,
+        "--names", names_file,
+        "--tabs", str(threads_n),
+        "--headless", "true",
+        "--storage-state", state_file
+    ]
+    proc = subprocess.Popen(cmd)
+    running_processes[proc.pid] = proc
+    pid = proc.pid
+    task_id = str(uuid.uuid4())
+    task = {
+        "id": task_id,
+        "user_id": user_id,
+        "type": "message_attack",
+        "pair_list": pair_list,
+        "pair_index": start_idx,
+        "switch_minutes": switch_minutes,
+        "threads": threads_n,
+        "names_file": names_file,
+        "target_thread_url": thread_url,
+        "target_type": target_mode,
+        "target_display": target_display,
+        "last_switch_time": time.time(),
+        "status": "running",
+        "cmd": cmd,
+        "pid": pid,
+        "display_pid": pid,
+        "proc_list": [pid],
+        "proc": proc,
+        "start_time": time.time()
+    }
+    persistent_tasks.append(task)
+    save_persistent_tasks()
+    tasks.append(task)
+    users_tasks[user_id] = tasks
+    logging.info(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Message attack start user={user_id} task={task_id} target={target_display} pid={pid}")
+
+    status = "Spamming...!\n"
+    curr_u = pair_list[task['pair_index']]
+    for u in pair_list:
+        if u == curr_u:
+            status += f"using - {u}\n"
+        else:
+            status += f"cooldown - {u}\n"
+    status += f"To stop 🛑 type /stop {task['display_pid']} or /stop all to stop all processes."
+
+    sent_msg = await update.message.reply_text(warning + status)
+    task['status_chat_id'] = update.message.chat_id
+    task['status_msg_id'] = sent_msg.message_id
+    return ConversationHandler.END
+
+async def pattack_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    if not is_authorized(user_id):
+        await update.message.reply_text("⚠️ You are not authorised to use, dm owner to gain access! @spyther ⚠️")
+        return ConversationHandler.END
+    if user_id not in users_data or not users_data[user_id]['accounts']:
+        await update.message.reply_text("❗ Please /login first. ❗")
+        return ConversationHandler.END
+    data = users_data[user_id]
+    if data['default'] is None:
+        data['default'] = 0
+        save_user_data(user_id, data)
+    await update.message.reply_text("Where you want to send msgs ? dm or gc")
+    return P_MODE
+
+async def p_get_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.lower().strip()
+
+    if 'dm' in text:
+        context.user_data['mode'] = 'dm'
+        await update.message.reply_text("Enter target username (for display):")
+        return P_TARGET_DISPLAY
+
+    elif 'gc' in text:
+        context.user_data['mode'] = 'gc'
+        await update.message.reply_text("Enter group name (for display):")
+        return P_TARGET_DISPLAY
+
+    else:
+        await update.message.reply_text("Please reply with 'dm' or 'gc'")
+        return P_MODE
+
+async def p_get_target_display(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    target_display = update.message.text.strip()
+    if not target_display:
+        await update.message.reply_text("⚠️ Invalid input. ⚠️")
+        return P_TARGET_DISPLAY
+    context.user_data['target_display'] = target_display
+    if context.user_data['mode'] == 'dm':
+        await update.message.reply_text("Enter username thread url:")
+    else:
+        await update.message.reply_text("Enter gc thread url:")
+    return P_THREAD_URL
+
+async def p_get_thread_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    thread_url = update.message.text.strip()
+    if not thread_url.startswith("https://www.instagram.com/direct/t/"):
+        await update.message.reply_text("⚠️ Invalid thread URL. It should be like https://www.instagram.com/direct/t/{id}/ ⚠️")
+        return P_THREAD_URL
+    context.user_data['thread_url'] = thread_url
+    await update.message.reply_text("Send messages like: msg1 & msg2 & msg3 or upload .txt file")
+    return P_MESSAGES
+
+async def p_get_messages_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    document = update.message.document
+
+    if not document:
+        await update.message.reply_text("❌ Please upload a .txt file.")
+        return ConversationHandler.END
+
+    file = await document.get_file()
+
+    import uuid, os
+    randomid = str(uuid.uuid4())[:8]
+    names_file = f"{user_id}_{randomid}.txt"
+
+    # Save uploaded .txt file
+    await file.download_to_drive(names_file)
+
+    # store file path in context so p_get_messages can use it
+    context.user_data['uploaded_names_file'] = names_file
+
+    # Reuse same logic as text handler
+    return await p_get_messages(update, context)
+
+async def p_get_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+
+    import uuid, os, json, time, random
+
+    # Check if we came from file upload handler
+    uploaded_file = context.user_data.pop('uploaded_names_file', None)
+
+    if uploaded_file and os.path.exists(uploaded_file):
+        # Use already saved .txt file from upload
+        names_file = uploaded_file
+        raw_text = f"[USING_UPLOADED_FILE:{os.path.basename(uploaded_file)}]"
+        logging.debug("USING UPLOADED FILE: %r", uploaded_file)
+    else:
+        # Normal text input flow
+        raw_text = (update.message.text or "").strip()
+        logging.debug("RAW MESSAGES INPUT: %r", raw_text)
+
+        # Normalize to handle fullwidth & etc.
+        text = unicodedata.normalize("NFKC", raw_text)
+
+        # Always make a temp file
+        randomid = str(uuid.uuid4())[:8]
+        names_file = f"{user_id}_{randomid}.txt"
+
+        # ✅ Write raw text directly so msgb.py handles splitting correctly
+        try:
+            with open(names_file, 'w', encoding='utf-8') as f:
+                f.write(text)
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error creating file: {e}")
+            return ConversationHandler.END
+
     data = users_data[user_id]
     pairs = data.get('pairs')
     pair_list = pairs['list'] if pairs else [data['accounts'][data['default']]['ig_username']]
@@ -2181,7 +2368,7 @@ def main_bot():
     )
     application.add_handler(conv_slogin)
     
-   psid_handler = ConversationHandler(
+    psid_handler = ConversationHandler(
     entry_points=[CommandHandler("psid", psid_start)],
     states={
         PSID_SESSION: [MessageHandler(filters.TEXT & ~filters.COMMAND, psid_get_session)],
@@ -2206,6 +2393,21 @@ def main_bot():
         fallbacks=[],
     )
     application.add_handler(conv_attack)
+
+    conv_pattack = ConversationHandler(
+        entry_points=[CommandHandler("pattack", pattack_start)],
+        states={
+            P_MODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, p_get_mode)],
+            P_TARGET_DISPLAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, p_get_target_display)],
+            P_THREAD_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, p_get_thread_url)],
+            P_MESSAGES: [
+                MessageHandler(filters.Document.FileExtension("txt"), p_get_messages_file),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, p_get_messages),
+            ],
+        },
+        fallbacks=[],
+    )
+    application.add_handler(conv_pattack)
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
