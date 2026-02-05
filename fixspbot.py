@@ -891,7 +891,10 @@ async def psid_get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # Save Instagrapi
     cl = Client()
-    cl.login_by_sessionid(sessionid)
+    cl.set_settings({"authorization_data": {"sessionid": sessionid}})
+    cl.private._authorization_data = {"sessionid": sessionid}
+    info = cl.account_info()
+    cl.user_id = info.pk
     ig_file = f"sessions/{user_id}_{username}_session.json"
     cl.dump_settings(ig_file)
 
