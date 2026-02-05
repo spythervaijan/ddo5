@@ -20,19 +20,19 @@ const defaultDelays = {
 };
 
 const CONSTANT_WORDS = [
-    'TMR🐿️',
-    'CHUTIYA🐦‍🔥', 
-    'CHUD🦕',
-    'TBKC🦐',
-    'TMKC🐚',
-    'RANDI🐡',
-    'POOR🐬',
-    'AUTO WALE🦡',
-    'LUN CHUS🐾',
-    'MA CHUDA👻',
-    'JATIN TERA PAPA🕷️',
-    'TMKC ME AALU🦋',
-    'CHUDJA🐣'
+    'Bᴏʟᴇ RaHuL पिताश्री  Mᴇʀɪ Mᴀ Cʜᴏᴅ Dᴏ',
+    'sᴀʟᴇ ᴀᴅɪᴠᴀsɪ ᴋᴇ ʟᴀᴅᴋᴇ! ', 
+    'ʜᴇʟʟᴏ ᴍᴀʀɴᴀ ɴᴀʜɪ ʜᴀɪ ᴍᴀᴅʀᴄʜᴏᴅ! ',
+    'ᴄʜᴜᴅ ᴋᴇ ᴘᴀɢᴀʟ ʜᴏɢᴀʏᴀ',
+    'ᴄʜᴀʟ ʙʜᴇᴇᴋʜ ᴍᴀɴɢ',
+    'ɢᴀʀᴇᴇʙ ᴋᴀ ʙᴀᴄʜʜᴀ ',
+    'Kɪ Mᴀᴀ Lᴀɴɢᴅɪ',
+    'ᴋɪ ʙᴜᴀ ʀᴀɴᴅɪ ʜᴀɪɪ ',
+    'ᴋɪ ʙᴇʜɴ ᴋɪ ᴄʜᴜᴛ ᴋᴀʟɪ ᴋᴀʟɪ',
+    'Kɪ Mᴀ Kᴀʀᴇ Bʜᴀᴡ Bʜᴀᴡ',
+    'Bᴏʟᴇ राहुल Pᴀᴘᴀ Mᴜᴊʜᴇ Mᴀᴀғ Kᴀʀᴅᴏ',
+    'Cʰᵃˡ ʳⁿᵈʸᵏ पेरो में ɢɪʀᴋᴇ नाक ʀᴀɢᴀᴅ᭄',
+    'कि मां रण्डी->-ᥬ😜᭄'
 ];
 
 // ========== ALL EMOJI SECTIONS (12 SECTIONS) ==========
@@ -107,7 +107,7 @@ function convertToCustomFont(text) {
 
 // ========== ALL REPLY MESSAGES IN CUSTOM FONT ==========
 const replyMessages = {
-    rougesBot: convertToCustomFont('rouges bot'),
+    राहुल अब्बू sBot: convertToCustomFont('राहुल अब्बू s bot'),
     tripleNcStarted: convertToCustomFont('triple nc started') + ' 🎀',
     ncStarted: convertToCustomFont('nc started') + ' 🎀',
     csStarted: convertToCustomFont('cs nc started') + ' 🎀',
@@ -131,12 +131,12 @@ const replyMessages = {
     invalidNcNumber: convertToCustomFont('invalid nc number use nc1 to nc13') + ' 🎀',
     usage: convertToCustomFont('usage') + ' 🎀',
     activeBots: convertToCustomFont('active bots') + ' 🎀',
-    rougesStatus: convertToCustomFont('rouges status') + ' 🎀',
+    राहुल अब्बू sStatus: convertToCustomFont('राहुल अब्बू s status') + ' 🎀',
     individualNc: convertToCustomFont('individual nc') + ' 🎀',
     constantText: convertToCustomFont('constant text') + ' 🎀',
     tripleAttacks: convertToCustomFont('triple attacks') + ' 🎀',
     constantTexts: convertToCustomFont('constant texts') + ' 🎀',
-    rougesPing: convertToCustomFont('rouges ping') + ' 🎀',
+    राहुल अब्बू sPing: convertToCustomFont('राहुल अब्बू s ping') + ' 🎀',
     activeBotsCount: convertToCustomFont('active bots') + ' 🎀',
     connected: convertToCustomFont('connected') + ' 🎀',
     pairingCode: convertToCustomFont('pairing code') + ' 🎀',
@@ -149,8 +149,8 @@ const replyMessages = {
 };
 
 // ========== MENU IN CUSTOM FONT ==========
-const rougeMenu = convertToCustomFont(`
-rouges bot 🎀
+const राहुल अब्बू Menu = convertToCustomFont(`
+राहुल अब्बू s bot 🎀
 
 .admin commands 🎀
 .admin → become admin (dm) 🎀
@@ -387,11 +387,11 @@ class BotSession {
                             if (connectedBots.length > 0) {
                                 const firstBot = connectedBots[0];
                                 await firstBot.sock.sendMessage(this.requestingJid, {
-                                    text: `${replyMessages.rougesBot}\n\n${replyMessages.pairingCode} ${code}\n\n${replyMessages.number} ${this.phoneNumber} 🎀`
+                                    text: `${replyMessages.राहुल अब्बू sBot}\n\n${replyMessages.pairingCode} ${code}\n\n${replyMessages.number} ${this.phoneNumber} 🎀`
                                 });
                             }
                         } else {
-                            console.log(`\n${replyMessages.rougesBot}`);
+                            console.log(`\n${replyMessages.राहुल अब्बू sBot}`);
                             console.log(`${replyMessages.pairingCode} ${code}`);
                             console.log(`${replyMessages.number} ${this.phoneNumber} 🎀\n`);
                         }
@@ -468,7 +468,7 @@ class BotSession {
             if (isDM && text === '.admin') {
                 if (roles.admins.length === 0) {
                     addAdmin(sender);
-                    await this.sendMessage(from, `${replyMessages.rougesBot}\n\n${replyMessages.youAreNowAdmin}`);
+                    await this.sendMessage(from, `${replyMessages.राहुल अब्बू sBot}\n\n${replyMessages.youAreNowAdmin}`);
                 } else if (senderIsAdmin) {
                     await this.sendMessage(from, replyMessages.youAreAlreadyAdmin);
                 } else {
@@ -545,7 +545,7 @@ class BotSession {
                 const startTime = Date.now();
                 await this.sendMessage(from, `${replyMessages.pinging}`);
                 const latency = Date.now() - startTime;
-                await this.sendMessage(from, `${replyMessages.rougesPing}\n\n${replyMessages.latency} ${latency}ᴍs`);
+                await this.sendMessage(from, `${replyMessages.राहुल अब्बू sPing}\n\n${replyMessages.latency} ${latency}ᴍs`);
                 return;
             }
 
@@ -562,7 +562,7 @@ class BotSession {
             if (!senderHasPermission) return;
 
             if (text === '.menu') {
-                await this.sendMessage(from, rougeMenu);
+                await this.sendMessage(from, राहुल अब्बू Menu);
                 return;
             }
 
@@ -576,7 +576,7 @@ class BotSession {
                     totalConstant += bot.activeConstantAttacks.size;
                 });
                 
-                const statusMsg = `${replyMessages.rougesStatus}\n\n` +
+                const statusMsg = `${replyMessages.राहुल अब्बू sStatus}\n\n` +
                                 `${replyMessages.individualNc} ${totalName}\n` +
                                 `${replyMessages.constantText} ${totalConstant}\n` +
                                 `${replyMessages.tripleAttacks} ${totalTriple}\n` +
@@ -1084,7 +1084,7 @@ class BotManager {
 }
 
 // ========== STARTUP MESSAGE ==========
-console.log(`${convertToCustomFont('rouges bot system')} 🎀\n`);
+console.log(`${convertToCustomFont('राहुल अब्बू s bot system')} 🎀\n`);
 console.log(`${convertToCustomFont('features')}:`);
 console.log(`${convertToCustomFont('• constant text attack')} 🌀`);
 console.log(`${convertToCustomFont('• real triple attacks (3 sections at once)')} 🔥`);
@@ -1107,5 +1107,4 @@ console.log(`${convertToCustomFont('send .admin in dm to become admin')} 🎀`);
 console.log(`${convertToCustomFont('send .cs hello nc1 50 to test')} 🌀`);
 console.log(`${convertToCustomFont('send .triple1 raid for real triple attack')} 🔥`);
 console.log(`${convertToCustomFont('send .cwords to see constant texts')} 📝`);
-
-console.log(`${convertToCustomFont('enjoy the power of rouges bot')} ⚡\n`);
+console.log(`${convertToCustomFont('enjoy the power of राहुल अब्बू s bot')} ⚡\n`);
