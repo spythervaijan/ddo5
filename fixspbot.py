@@ -10,9 +10,8 @@ import re
 from playwright.sync_api import sync_playwright
 import urllib.parse
 import subprocess
-import pty
-import errno
 import sys
+import errno
 from typing import Dict, List
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 import threading
@@ -40,17 +39,17 @@ logging.basicConfig(
 )
 
 user_fetching = set()
-user_cancel_fetch = set()  # new set
+user_cancel_fetch = set()
 AUTHORIZED_FILE = 'authorized_users.json'
 TASKS_FILE = 'tasks.json'
 OWNER_TG_ID = int(os.environ.get('OWNER_TG_ID'))
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
-authorized_users = []  # list of {'id': int, 'username': str}
-users_data: Dict[int, Dict] = {}  # unlocked data {'accounts': list, 'default': int, 'pairs': dict or None, 'switch_minutes': int, 'threads': int}
-users_pending: Dict[int, Dict] = {}  # pending challenges
-users_tasks: Dict[int, List[Dict]] = {}  # tasks per user
+authorized_users = []
+users_data: Dict[int, Dict] = {}
+users_pending: Dict[int, Dict] = {}
+users_tasks: Dict[int, List[Dict]] = {}
 persistent_tasks = []
 running_processes: Dict[int, subprocess.Popen] = {}
 waiting_for_otp = {}
@@ -68,10 +67,9 @@ def _sanitize_timestamps(obj):
         for k, v in obj.items():
             if isinstance(v, int) and k.endswith("_timestamp_us"):
                 try:
-                    secs = int(v) // 1_000_000  # convert microseconds → seconds
+                    secs = int(v) // 1_000_000
                 except Exception:
                     secs = None
-                # skip impossible years (>2100 or negative)
                 if secs is None or secs < 0 or secs > 4102444800:
                     new_obj[k] = None
                 else:
@@ -83,7 +81,6 @@ def _sanitize_timestamps(obj):
         return [_sanitize_timestamps(i) for i in obj]
     else:
         return obj
-
 
 async def playwright_login_and_save_state(username: str, password: str, user_id: int) -> str:
     """
@@ -106,7 +103,7 @@ async def playwright_login_and_save_state(username: str, password: str, user_id:
         )
 
         context = await browser.new_context(
-            user_agent=USER_AGENT,  # tumhara existing USER_AGENT
+            user_agent=USER_AGENT,
             viewport={"width": 1280, "height": 720},
         )
 
@@ -124,7 +121,6 @@ async def playwright_login_and_save_state(username: str, password: str, user_id:
             await page.title(),
         )
 
-        # ---------- CHECK LOGIN FORM ----------
         username_inputs = await page.locator('input[name="username"]').count()
         if username_inputs == 0:
             logging.warning(
@@ -135,7 +131,6 @@ async def playwright_login_and_save_state(username: str, password: str, user_id:
             username_inputs = await page.locator('input[name=\"username\"]').count()
 
         if username_inputs == 0:
-            # Still nahi mila → intro/splash
             html_snippet = (await page.content())[:1000].replace("\n", " ")
             logging.warning(
                 "[PLOGIN-ASYNC] Login form NOT loaded. URL=%s SNIPPET=%s",
@@ -145,37 +140,30 @@ async def playwright_login_and_save_state(username: str, password: str, user_id:
             await browser.close()
             raise ValueError("ERROR_010: Instagram login form not loaded (stuck on intro/splash)")
 
-        # ---------- HUMAN-LIKE LOGIN ----------
         username_input = page.locator('input[name="username"]')
         password_input = page.locator('input[name="password"]')
         login_button = page.locator('button[type="submit"]').first
 
-        # Username typing
         await username_input.click()
         await page.wait_for_timeout(random.randint(300, 900))
-        await username_input.fill("")  # clear
-        await username_input.type(username, delay=random.randint(60, 140))  # ms per char
+        await username_input.fill("")
+        await username_input.type(username, delay=random.randint(60, 140))
 
-        # Password typing
         await page.wait_for_timeout(random.randint(300, 900))
         await password_input.click()
         await page.wait_for_timeout(random.randint(200, 700))
         await password_input.fill("")
         await password_input.type(password, delay=random.randint(60, 140))
 
-        # Click login with tiny jitter
         await page.wait_for_timeout(random.randint(400, 1000))
         await login_button.click()
         logging.info("[PLOGIN-ASYNC] Submitted login form for %s", username)
 
-        # ---------- POST-LOGIN CHECK (OTP / SUCCESS) ----------
-        # Thoda time do redirect ke liye
         await page.wait_for_timeout(5000)
 
         current_url = page.url
         logging.info("[PLOGIN-ASYNC] After login URL=%s", current_url)
 
-        # Quick OTP detection without long timeout
         otp_locator = page.locator('input[name="verificationCode"]')
         otp_count = await otp_locator.count()
 
@@ -187,16 +175,10 @@ async def playwright_login_and_save_state(username: str, password: str, user_id:
                 otp_count,
             )
             await browser.close()
-            # Abhi ke liye clear error; baad me Telegram OTP flow hook kar sakte hain
             raise ValueError("ERROR_OTP: OTP / challenge required. Please use session/2FA flow.")
 
-        # Agar yahan tak aa gaye aur URL jaise:
-        # - /accounts/onetap/...
-        # - / (home feed, profile, etc.)
-        # to login successful maan lo
         logging.info("[PLOGIN-ASYNC] No OTP required, login looks successful. URL=%s", current_url)
 
-        # Kuch extra wait, phir state save
         await page.wait_for_timeout(4000)
 
         await context.storage_state(path=COOKIE_FILE)
@@ -207,8 +189,6 @@ async def playwright_login_and_save_state(username: str, password: str, user_id:
 
     return COOKIE_FILE
 
-
-# 🧩 Monkeypatch instagrapi to fix validation crash
 try:
     import instagrapi.extractors as extractors
     _orig_extract_reply_message = extractors.extract_reply_message
@@ -221,9 +201,7 @@ try:
     print("[Patch] Applied timestamp sanitizer to instagrapi extractors ✅")
 except Exception as e:
     print(f"[Patch Warning] Could not patch instagrapi: {e}")
-# === END PATCH ===
 
-# --- Playwright sync helper: run sync_playwright() inside a fresh thread ---
 def run_with_sync_playwright(fn, *args, **kwargs):
     """
     Runs `fn(p, *args, **kwargs)` where p is the object returned by sync_playwright()
@@ -250,7 +228,6 @@ def load_authorized():
     if os.path.exists(AUTHORIZED_FILE):
         with open(AUTHORIZED_FILE, 'r') as f:
             authorized_users = json.load(f)
-    # Ensure owner is authorized
     if not any(u['id'] == OWNER_TG_ID for u in authorized_users):
         authorized_users.append({'id': OWNER_TG_ID, 'username': 'owner'})
 
@@ -266,7 +243,6 @@ def load_users_data():
                 user_id = int(user_id_str)
                 with open(file, 'r') as f:
                     data = json.load(f)
-                # Defaults
                 if 'pairs' not in data:
                     data['pairs'] = None
                 if 'switch_minutes' not in data:
@@ -327,7 +303,6 @@ def get_storage_state_from_instagrapi(settings: Dict):
     cl = Client()
     cl.set_settings(settings)
 
-    # Collect cookies from instagrapi structures (compatible with multiple instagrapi versions)
     cookies_dict = {}
     if hasattr(cl, "session") and cl.session:
         try:
@@ -389,7 +364,6 @@ def list_group_chats(user_id, storage_state, username, password, max_groups=10, 
     updated = False
     new_state = None
 
-    # Load existing session if available
     if os.path.exists(session_file):
         try:
             cl.load_settings(session_file)
@@ -560,14 +534,13 @@ def perform_login(page, username, password):
         logging.error(f"Login failed: {str(e)}")
         raise
 
-# ---------------- Globals for PTY ----------------
 APP = None
 LOOP = None
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
 
-# ---------------- Child PTY login ----------------
-def child_login(user_id: int, username: str, password: str):
+# Windows-compatible login function
+def child_login_windows(user_id: int, username: str, password: str):
     cl = Client()
     username = username.strip().lower()
     session_file = f"sessions/{user_id}_{username}_session.json"
@@ -600,62 +573,32 @@ def child_login(user_id: int, username: str, password: str):
             print(f"[{username}] ❌ OTP failed: {e}")
     except Exception as e:
         print(f"[{username}] ❌ Login failed: {e}")
-    finally:
-        time.sleep(0.5)
-        sys.exit(0)
 
-# ---------------- PTY reader thread ----------------
-def reader_thread(user_id: int, chat_id: int, master_fd: int, username: str, password: str):
+# Windows-compatible reader thread
+def windows_reader_thread(user_id: int, chat_id: int, proc: subprocess.Popen, username: str, password: str):
     global APP, LOOP
-    buf = b""
     while True:
         try:
-            data = os.read(master_fd, 1024)
-            if not data:
+            # Read stdout
+            output = proc.stdout.readline().decode('utf-8', errors='ignore').strip()
+            if output and proc.poll() is None:
+                if should_display_output(output):
+                    try:
+                        if APP and LOOP:
+                            asyncio.run_coroutine_threadsafe(
+                                APP.bot.send_message(chat_id=chat_id, text=f"🔥{output}"), LOOP
+                            )
+                    except Exception:
+                        logging.error("[THREAD] send_message failed")
+            
+            # Check if process ended
+            if proc.poll() is not None:
                 break
-            buf += data
-            while b"\n" in buf or len(buf) > 2048:
-                if b"\n" in buf:
-                    line, buf = buf.split(b"\n", 1)
-                    text = line.decode(errors="ignore").strip()
-                else:
-                    text = buf.decode(errors="ignore")
-                    buf = b""
-                if not text:
-                    continue
-                if text.startswith("Code entered"):
-                    continue
-                lower = text.lower()
-                if (
-                    len(text) > 300
-                    or "cdninstagram.com" in lower
-                    or "http" in lower
-                    or "{" in text
-                    or "}" in text
-                    or "debug" in lower
-                    or "info" in lower
-                    or "urllib3" in lower
-                    or "connection" in lower
-                    or "starting new https" in lower
-                    or "instagrapi" in lower
-                ):
-                    continue
-                try:
-                    if APP and LOOP:
-                        asyncio.run_coroutine_threadsafe(
-                            APP.bot.send_message(chat_id=chat_id, text=f"🔥{text}"), LOOP
-                        )
-                except Exception:
-                    logging.error("[THREAD] send_message failed")
-        except OSError as e:
-            if e.errno == errno.EIO:
-                break
-            else:
-                logging.error("[THREAD] PTY read error: %s", e)
-                break
+                
         except Exception as e:
-            logging.error("[THREAD] Unexpected error: %s", e)
+            logging.error("[THREAD] Read error: %s", e)
             break
+    
     try:
         playwright_file = f"sessions/{user_id}_{username}_state.json"
         if os.path.exists(playwright_file):
@@ -665,54 +608,64 @@ def reader_thread(user_id: int, chat_id: int, master_fd: int, username: str, pas
                 data = users_data[user_id]
             else:
                 data = {'accounts': [], 'default': None, 'pairs': None, 'switch_minutes': 10, 'threads': 1}
-            # normalize incoming username
+            
             norm_username = username.strip().lower()
 
             for i, acc in enumerate(data['accounts']):
                 if acc.get('ig_username', '').strip().lower() == norm_username:
-                    # overwrite existing entry for exact same username (normalized)
                     data['accounts'][i] = {'ig_username': norm_username, 'password': password, 'storage_state': state}
                     data['default'] = i
                     break
             else:
-                # not found -> append new normalized account
                 data['accounts'].append({'ig_username': norm_username, 'password': password, 'storage_state': state})
                 data['default'] = len(data['accounts']) - 1
+            
             save_user_data(user_id, data)
             users_data[user_id] = data
             if APP and LOOP:
-                asyncio.run_coroutine_threadsafe(APP.bot.send_message(chat_id=chat_id, text="✅ Login successful and saved securely! 🎉"), LOOP)
+                asyncio.run_coroutine_threadsafe(
+                    APP.bot.send_message(chat_id=chat_id, text="✅ Login successful and saved securely! 🎉"), LOOP
+                )
         else:
             if APP and LOOP:
-                asyncio.run_coroutine_threadsafe(APP.bot.send_message(chat_id=chat_id, text="⚠️ Login failed. No session saved."), LOOP)
+                asyncio.run_coroutine_threadsafe(
+                    APP.bot.send_message(chat_id=chat_id, text="⚠️ Login failed. No session saved."), LOOP
+                )
     except Exception as e:
         logging.error("Failed to save user data: %s", e)
         if APP and LOOP:
-            asyncio.run_coroutine_threadsafe(APP.bot.send_message(chat_id=chat_id, text=f"⚠️ Error saving data: {str(e)}"), LOOP)
+            asyncio.run_coroutine_threadsafe(
+                APP.bot.send_message(chat_id=chat_id, text=f"⚠️ Error saving data: {str(e)}"), LOOP
+            )
     finally:
         with SESSIONS_LOCK:
             if user_id in SESSIONS:
                 try:
-                    os.close(SESSIONS[user_id]["master_fd"])
+                    proc.terminate()
                 except Exception:
                     pass
                 SESSIONS.pop(user_id, None)
 
-# ---------------- Relay input ----------------
-async def relay_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text
-    with SESSIONS_LOCK:
-        info = SESSIONS.get(user_id)
-    if not info:
-        return
-    master_fd = info["master_fd"]
-    try:
-        os.write(master_fd, (text + "\n").encode())
-    except OSError as e:
-        await update.message.reply_text(f"Failed to write to PTY stdin: {e}")
-    except Exception as e:
-        logging.error("Relay input error: %s", e)
+def should_display_output(text: str) -> bool:
+    """Filter out noise from output"""
+    if not text:
+        return False
+    lower = text.lower()
+    if (
+        len(text) > 300
+        or "cdninstagram.com" in lower
+        or "http" in lower
+        or "{" in text
+        or "}" in text
+        or "debug" in lower
+        or "info" in lower
+        or "urllib3" in lower
+        or "connection" in lower
+        or "starting new https" in lower
+        or "instagrapi" in lower
+    ):
+        return False
+    return True
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -726,32 +679,48 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("❌ Invalid code. Please enter 6-digit code.")
             return
-    # Fallback to relay
-    await relay_input(update, context)
+    
+    # Relay to Windows session
+    with SESSIONS_LOCK:
+        info = SESSIONS.get(user_id)
+    if info and 'proc' in info:
+        try:
+            proc = info['proc']
+            proc.stdin.write(text + "\n")
+            proc.stdin.flush()
+        except Exception as e:
+            await update.message.reply_text(f"Failed to write to process: {e}")
+    else:
+        await update.message.reply_text("No active login session. Use /login to start.")
 
-# ---------------- Kill command ----------------
 async def cmd_kill(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     with SESSIONS_LOCK:
         info = SESSIONS.get(user_id)
     if not info:
-        await update.message.reply_text("No active PTY session.")
+        await update.message.reply_text("No active login session.")
         return
-    pid = info["pid"]
-    master_fd = info["master_fd"]
-    try:
-        os.kill(pid, 15)
-    except Exception:
-        pass
-    try:
-        os.close(master_fd)
-    except Exception:
-        pass
+    
+    if 'proc' in info:
+        proc = info['proc']
+        try:
+            proc.terminate()
+            if proc.poll() is None:
+                proc.kill()
+        except Exception:
+            pass
+    elif 'pid' in info:
+        pid = info['pid']
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except Exception:
+            pass
+    
     with SESSIONS_LOCK:
         SESSIONS.pop(user_id, None)
-    await update.message.reply_text(f"🛑 Stopped login terminal (pid={pid}) successfully.")
+    
+    await update.message.reply_text("🛑 Stopped login session successfully.")
 
-# ---------------- Flush command ----------------
 async def flush(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     if not is_owner(user_id):
@@ -765,7 +734,6 @@ async def flush(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await asyncio.sleep(3)
             if proc.poll() is None:
                 proc.kill()
-            # remove from runtime map if present
             pid = task.get('pid')
             if pid in running_processes:
                 running_processes.pop(pid, None)
@@ -885,12 +853,10 @@ async def psid_get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     os.makedirs("sessions", exist_ok=True)
 
-    # Save Playwright
     pw_file = f"sessions/{user_id}_{username}_state.json"
     with open(pw_file, "w") as f:
         json.dump(state, f, indent=2)
 
-    # Save in bot memory
     if user_id not in users_data:
         users_data[user_id] = {'accounts': [], 'default': None, 'pairs': None, 'switch_minutes': 10, 'threads': 1}
 
@@ -904,8 +870,6 @@ async def psid_get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     await update.message.reply_text(f"🎉 Session saved!\nUser: {username}\nPlaywright ready.")
     return ConversationHandler.END
-    
-
 
 async def login_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
@@ -916,7 +880,6 @@ async def login_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     return USERNAME
 
 async def get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Normalize username: remove surrounding spaces and lowercase
     context.user_data['ig_username'] = update.message.text.strip().lower()
     await update.message.reply_text("🔒 Enter password: 🔒")
     return PASSWORD
@@ -929,27 +892,40 @@ async def get_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     
     with SESSIONS_LOCK:
         if user_id in SESSIONS:
-            await update.message.reply_text("⚠️ PTY session already running. Use /kill first.")
+            await update.message.reply_text("⚠️ Login session already running. Use /kill first.")
             return ConversationHandler.END
 
-    pid, master_fd = pty.fork()
-    if pid == 0:
-        try:
-            child_login(user_id, username, password)
-        except SystemExit:
-            os._exit(0)
-        except Exception as e:
-            print(f"[CHILD] Unexpected error: {e}")
-            os._exit(1)
-    else:
-        t = threading.Thread(target=reader_thread, args=(user_id, chat_id, master_fd, username, password), daemon=True)
-        t.start()
-        with SESSIONS_LOCK:
-            SESSIONS[user_id] = {"pid": pid, "master_fd": master_fd, "thread": t, "username": username, "password": password, "chat_id": chat_id}
-        
+    # Windows-compatible login process
+    proc = subprocess.Popen(
+        [sys.executable, "-c", 
+         f"import sys; sys.path.insert(0, '.'); from {__name__} import child_login_windows; "
+         f"child_login_windows({user_id}, '{username}', '{password}')"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        universal_newlines=True
+    )
+    
+    t = threading.Thread(
+        target=windows_reader_thread, 
+        args=(user_id, chat_id, proc, username, password), 
+        daemon=True
+    )
+    t.start()
+    
+    with SESSIONS_LOCK:
+        SESSIONS[user_id] = {
+            "proc": proc, 
+            "thread": t, 
+            "username": username, 
+            "password": password, 
+            "chat_id": chat_id
+        }
+    
     return ConversationHandler.END
 
-# --- /plogin handlers (ASYNC, NO THREAD) ---
 async def plogin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     if not is_authorized(user_id):
@@ -959,12 +935,10 @@ async def plogin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     await update.message.reply_text("🔐 Enter Instagram username for Playwright login: ")
     return PLO_USERNAME
 
-
 async def plogin_get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['pl_username'] = update.message.text.strip().lower()
     await update.message.reply_text("🔒 Enter password: 🔒")
     return PLO_PASSWORD
-
 
 async def plogin_get_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
@@ -975,17 +949,14 @@ async def plogin_get_password(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("🔄 Starting Playwright login... (async, no threads)")
 
     try:
-        # 1) Playwright se login + storage_state save
         state_file = await playwright_login_and_save_state(username, password, user_id)
 
-        # 2) JSON state load karke Instagrapi me convert karo (tumhara purana logic reuse)
         logging.info("[PLOGIN] Loading storage_state from %s", state_file)
         state = json.load(open(state_file))
 
         cookies = [c for c in state.get('cookies', []) if c.get('domain') == '.instagram.com']
         logging.info("[PLOGIN] cookies for .instagram.com = %s", len(cookies))
 
-        # Extract sessionid cookie (Playwright → Instagrapi)
         sessionid = None
         for c in cookies:
             if c.get("name") == "sessionid":
@@ -999,14 +970,12 @@ async def plogin_get_password(update: Update, context: ContextTypes.DEFAULT_TYPE
         cl = Client()
         logging.info("[PLOGIN] Logging into Instagrapi using sessionid (len=%s)", len(sessionid))
 
-        # Instagrapi new valid method
         cl.login_by_sessionid(sessionid)
 
         session_file = f"sessions/{user_id}_{username}_session.json"
         logging.info("[PLOGIN] Dumping Instagrapi settings to %s", session_file)
         cl.dump_settings(session_file)
 
-        # 3) users_data update (same tumhara code)
         logging.info("[PLOGIN] Updating users_data for user_id=%s", user_id)
         if user_id not in users_data:
             users_data[user_id] = {
@@ -1045,8 +1014,6 @@ async def plogin_get_password(update: Update, context: ContextTypes.DEFAULT_TYPE
     except ValueError as ve:
         err_msg = str(ve)
         logging.error("[PLOGIN] ValueError: %s", err_msg)
-
-        # Specific errors like ERROR_010, ERROR_OTP, timeouts etc
         await update.message.reply_text(f"❌ Login failed: {err_msg}")
 
     except Exception as e:
@@ -1055,7 +1022,6 @@ async def plogin_get_password(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     return ConversationHandler.END
 
-# --- /slogin handlers ---
 async def slogin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     if not is_authorized(user_id):
@@ -1076,11 +1042,13 @@ async def slogin_get_session(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("✅ Valid session ID! 📝 Enter username to save:")
         return SLOG_USERNAME
     except LoginRequired:
-        os.remove(temp_file) if os.path.exists(temp_file) else None
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
         await update.message.reply_text("❌ Invalid session ID.")
         return ConversationHandler.END
     except Exception as e:
-        os.remove(temp_file) if os.path.exists(temp_file) else None
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
         await update.message.reply_text(f"❌ Error validating session: {str(e)}")
         return ConversationHandler.END
 
@@ -1092,14 +1060,12 @@ async def slogin_get_username(update: Update, context: ContextTypes.DEFAULT_TYPE
     os.makedirs('sessions', exist_ok=True)
     os.rename(temp_file, session_file)
 
-    # Generate playwright state
     settings = json.load(open(session_file))
     state = get_storage_state_from_instagrapi(settings)
     playwright_file = f"sessions/{user_id}_{username}_state.json"
     with open(playwright_file, 'w') as f:
         json.dump(state, f)
 
-    # Save to user data
     if user_id not in users_data:
         users_data[user_id] = {'accounts': [], 'default': None, 'pairs': None, 'switch_minutes': 10, 'threads': 1}
         save_user_data(user_id, users_data[user_id])
@@ -1107,7 +1073,7 @@ async def slogin_get_username(update: Update, context: ContextTypes.DEFAULT_TYPE
     found = False
     for i, acc in enumerate(data['accounts']):
         if acc.get('ig_username', '').strip().lower() == username:
-            acc['password'] = ''  # No password for session
+            acc['password'] = ''
             acc['storage_state'] = state
             data['default'] = i
             found = True
@@ -1176,7 +1142,6 @@ async def logout_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 data['default'] = 0 if data['accounts'] else None
             elif data['default'] > i:
                 data['default'] -= 1
-            # Update pairs if exists
             if data['pairs']:
                 pl = data['pairs']['list']
                 if username in pl:
@@ -1198,7 +1163,6 @@ async def logout_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         os.remove(state_file)
     await update.message.reply_text(f"✅ Logged out and removed {username}. Files deleted. ✅")
 
-# New commands
 async def pair_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     if not is_authorized(user_id):
@@ -1222,7 +1186,6 @@ async def pair_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(f"⚠️ Can't find that account: {missing[0]}. Save it again with /login. ⚠️")
         return
     data['pairs'] = {'list': us, 'default_index': 0}
-    # Set default to first in pair
     first_u = us[0]
     for i, acc in enumerate(data['accounts']):
         if acc['ig_username'] == first_u:
@@ -1245,7 +1208,6 @@ async def unpair_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     pair_info = data['pairs']
     pair_list = pair_info['list']
 
-    # --- no arguments case ---
     if not context.args:
         msg = "👥 Current pair list:\n"
         for i, u in enumerate(pair_list, 1):
@@ -1257,14 +1219,12 @@ async def unpair_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     arg = context.args[0].strip().lower()
 
-    # --- unpair all ---
     if arg == "all":
         data['pairs'] = None
         save_user_data(user_id, data)
         await update.message.reply_text("🧹 All paired accounts removed successfully.")
         return
 
-    # --- unpair specific account ---
     target = arg
     if target not in pair_list:
         await update.message.reply_text(f"⚠️ {target} is not in current pair list. ⚠️")
@@ -1275,7 +1235,6 @@ async def unpair_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         data['pairs'] = None
         msg = f"✅ Removed {target}. No pairs left."
     else:
-        # adjust default index if needed
         if pair_info.get('default_index', 0) >= len(pair_list):
             pair_info['default_index'] = 0
         msg = f"✅ Removed {target}. Remaining pairs: {', '.join(pair_list)}"
@@ -1347,11 +1306,10 @@ async def viewpref(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     threads = data.get('threads', 1)
     msg += f"🧵 Threads: {threads}\n"
     msg += f"👤 Saved accounts: {saved_accounts}\n"
-    # Check running attacks
     tasks = users_tasks.get(user_id, [])
     running_attacks = [t for t in tasks if t.get('type') == 'message_attack' and t['status'] == 'running' and t['proc'].poll() is None]
     if running_attacks:
-        task = running_attacks[0]  # Assume one
+        task = running_attacks[0]
         pid = task['pid']
         ttype = task['target_type']
         tdisplay = task['target_display']
@@ -1418,7 +1376,6 @@ async def get_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             except:
                 pass
 
-        # ✅ Agar beech me /cancel aaya tha to result ignore karo
         if user_id in user_cancel_fetch:
             user_cancel_fetch.discard(user_id)
             await update.message.reply_text("❌ Fetching cancelled. Ignoring result. ❌")
@@ -1494,45 +1451,33 @@ async def get_messages_file(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     file = await document.get_file()
 
-    import uuid, os
     randomid = str(uuid.uuid4())[:8]
     names_file = f"{user_id}_{randomid}.txt"
 
-    # Save uploaded .txt file
     await file.download_to_drive(names_file)
 
-    # store file path in context so get_messages can use it
     context.user_data['uploaded_names_file'] = names_file
 
-    # Reuse same logic as text handler
     return await get_messages(update, context)
 
 async def get_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
 
-    import uuid, os, json, time, random
-
-    # Check if we came from file upload handler
     uploaded_file = context.user_data.pop('uploaded_names_file', None)
 
     if uploaded_file and os.path.exists(uploaded_file):
-        # Use already saved .txt file from upload
         names_file = uploaded_file
         raw_text = f"[USING_UPLOADED_FILE:{os.path.basename(uploaded_file)}]"
         logging.debug("USING UPLOADED FILE: %r", uploaded_file)
     else:
-        # Normal text input flow
         raw_text = (update.message.text or "").strip()
         logging.debug("RAW MESSAGES INPUT: %r", raw_text)
 
-        # Normalize to handle fullwidth & etc.
         text = unicodedata.normalize("NFKC", raw_text)
 
-        # Always make a temp file
         randomid = str(uuid.uuid4())[:8]
         names_file = f"{user_id}_{randomid}.txt"
 
-        # ✅ Write raw text directly so msgb.py handles splitting correctly
         try:
             with open(names_file, 'w', encoding='utf-8') as f:
                 f.write(text)
@@ -1540,9 +1485,6 @@ async def get_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             await update.message.reply_text(f"❌ Error creating file: {e}")
             return ConversationHandler.END
 
-    # --- Below part unchanged (keeps rotation, task limits, etc.) ---
-
-    # --- Below part unchanged (keeps rotation, task limits, etc.) ---
     data = users_data[user_id]
     pairs = data.get('pairs')
     pair_list = pairs['list'] if pairs else [data['accounts'][data['default']]['ig_username']]
@@ -1573,8 +1515,9 @@ async def get_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         with open(state_file, 'w') as f:
             json.dump(start_acc['storage_state'], f)
 
+    # Windows-compatible command
     cmd = [
-        "python3", "msg.py",
+        sys.executable, "msg.py",
         "--username", start_u,
         "--password", start_pass,
         "--thread-url", thread_url,
@@ -1691,45 +1634,33 @@ async def p_get_messages_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     file = await document.get_file()
 
-    import uuid, os
     randomid = str(uuid.uuid4())[:8]
     names_file = f"{user_id}_{randomid}.txt"
 
-    # Save uploaded .txt file
     await file.download_to_drive(names_file)
 
-    # store file path in context so p_get_messages can use it
     context.user_data['uploaded_names_file'] = names_file
 
-    # Reuse same logic as text handler
     return await p_get_messages(update, context)
 
 async def p_get_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
 
-    import uuid, os, json, time, random
-
-    # Check if we came from file upload handler
     uploaded_file = context.user_data.pop('uploaded_names_file', None)
 
     if uploaded_file and os.path.exists(uploaded_file):
-        # Use already saved .txt file from upload
         names_file = uploaded_file
         raw_text = f"[USING_UPLOADED_FILE:{os.path.basename(uploaded_file)}]"
         logging.debug("USING UPLOADED FILE: %r", uploaded_file)
     else:
-        # Normal text input flow
         raw_text = (update.message.text or "").strip()
         logging.debug("RAW MESSAGES INPUT: %r", raw_text)
 
-        # Normalize to handle fullwidth & etc.
         text = unicodedata.normalize("NFKC", raw_text)
 
-        # Always make a temp file
         randomid = str(uuid.uuid4())[:8]
         names_file = f"{user_id}_{randomid}.txt"
 
-        # ✅ Write raw text directly so msgb.py handles splitting correctly
         try:
             with open(names_file, 'w', encoding='utf-8') as f:
                 f.write(text)
@@ -1768,7 +1699,7 @@ async def p_get_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             json.dump(start_acc['storage_state'], f)
 
     cmd = [
-        "python3", "msg.py",
+        sys.executable, "msg.py",
         "--username", start_u,
         "--password", start_pass,
         "--thread-url", thread_url,
@@ -1831,10 +1762,6 @@ def load_persistent_tasks():
         persistent_tasks = []
 
 def save_persistent_tasks():
-    """
-    Safely write persistent_tasks to TASKS_FILE.
-    Removes runtime-only values (like 'proc') and ensures JSON-safe data.
-    """
     safe_list = []
     for t in persistent_tasks:
         cleaned = {}
@@ -1880,6 +1807,20 @@ def mark_task_completed_persistent(task_id: str):
             save_persistent_tasks()
             break
 
+def kill_process(pid):
+    """Cross-platform process killing"""
+    try:
+        if os.name == 'posix':  # Unix/Linux/Mac
+            os.kill(pid, signal.SIGTERM)
+        else:  # Windows
+            import ctypes
+            PROCESS_TERMINATE = 1
+            handle = ctypes.windll.kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+            ctypes.windll.kernel32.TerminateProcess(handle, -1)
+            ctypes.windll.kernel32.CloseHandle(handle)
+    except Exception as e:
+        logging.error(f"Failed to kill process {pid}: {e}")
+
 def restore_tasks_on_start():
     load_persistent_tasks()
     print(f"🔄 Restoring {len([t for t in persistent_tasks if t.get('type') == 'message_attack' and t['status'] == 'running'])} running message attacks...")
@@ -1887,10 +1828,10 @@ def restore_tasks_on_start():
         if task.get('type') == 'message_attack' and task['status'] == 'running':
             old_pid = task['pid']
             try:
-                os.kill(old_pid, signal.SIGTERM)
+                kill_process(old_pid)
                 time.sleep(1)
-            except OSError:
-                pass  # Already dead
+            except Exception:
+                pass
             user_id = task['user_id']
             data = users_data.get(user_id)
             if not data:
@@ -1915,11 +1856,10 @@ def restore_tasks_on_start():
                     json.dump(curr_acc['storage_state'], f)
             names_file = task['names_file']
             if not os.path.exists(names_file):
-                # Recreate if missing? But skip for now
                 mark_task_stopped_persistent(task['id'])
                 continue
             cmd = [
-                "python3", "msg.py",
+                sys.executable, "msg.py",
                 "--username", curr_u,
                 "--password", curr_pass,
                 "--thread-url", task['target_thread_url'],
@@ -1930,7 +1870,6 @@ def restore_tasks_on_start():
             ]
             try:
                 proc = subprocess.Popen(cmd)
-                # Register runtime map
                 running_processes[proc.pid] = proc
                 new_pid = proc.pid
                 update_task_pid_persistent(task['id'], new_pid)
@@ -1978,7 +1917,6 @@ def get_switch_update(task: Dict) -> str:
 def switch_task_sync(task: Dict):
     user_id = task['user_id']
 
-    # Keep reference to old proc (don't terminate it yet)
     try:
         old_proc = task.get('proc')
         old_pid = task.get('pid')
@@ -1986,7 +1924,6 @@ def switch_task_sync(task: Dict):
         old_proc = None
         old_pid = task.get('pid')
 
-    # Advance index first so new account is chosen
     task['pair_index'] = (task['pair_index'] + 1) % len(task['pair_list'])
     next_u = task['pair_list'][task['pair_index']]
     data = users_data.get(user_id)
@@ -2015,9 +1952,8 @@ def switch_task_sync(task: Dict):
         except Exception as e:
             logging.error(f"Failed to write state file for {next_u}: {e}")
 
-    # Launch new process FIRST so overlap prevents downtime
     new_cmd = [
-        "python3", "msg.py",
+        sys.executable, "msg.py",
         "--username", next_u,
         "--password", next_pass,
         "--thread-url", task['target_thread_url'],
@@ -2032,10 +1968,8 @@ def switch_task_sync(task: Dict):
         logging.error(f"Failed to launch new proc for switch to {next_u}: {e}")
         return
 
-    # Append new to proc_list
     task['proc_list'].append(new_proc.pid)
 
-    # Register new proc and update task/persistent info
     running_processes[new_proc.pid] = new_proc
     task['cmd'] = new_cmd
     task['pid'] = new_proc.pid
@@ -2046,23 +1980,19 @@ def switch_task_sync(task: Dict):
     except Exception as e:
         logging.error(f"Failed to update persistent pid for task {task.get('id')}: {e}")
 
-    # Give old proc a short cooldown window before killing it (avoid downtime)
     if old_proc and old_pid != new_proc.pid:
         try:
-            # Allow overlap for a short cooldown
             time.sleep(5)
             try:
                 old_proc.terminate()
             except Exception:
                 pass
-            # wait a bit for graceful shutdown
             time.sleep(2)
             if old_proc.poll() is None:
                 try:
                     old_proc.kill()
                 except Exception:
                     pass
-            # Remove old from proc_list and running_processes
             if old_pid in task['proc_list']:
                 task['proc_list'].remove(old_pid)
             if old_pid in running_processes:
@@ -2070,7 +2000,6 @@ def switch_task_sync(task: Dict):
         except Exception as e:
             logging.error(f"Error while stopping old proc after switch: {e}")
 
-    # Send/update status message (edit if message id present)
     try:
         chat_id = task.get('status_chat_id', user_id)
         msg_id = task.get('status_msg_id')
@@ -2123,7 +2052,6 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await asyncio.sleep(3)
             if proc.poll() is None:
                 proc.kill()
-            # Remove from runtime map if present
             pid = task.get('pid')
             if pid in running_processes:
                 running_processes.pop(pid, None)
@@ -2140,7 +2068,6 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pid_to_stop = int(arg)
         stopped_task = None
 
-        # 1) Try users_tasks by display_pid
         for task in tasks[:]:
             if task.get('display_pid') == pid_to_stop:
                 proc_list = task.get('proc_list', [])
@@ -2159,7 +2086,7 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                                 pass
                     else:
                         try:
-                            os.kill(backend_pid, signal.SIGTERM)
+                            kill_process(backend_pid)
                         except Exception:
                             pass
                 for backend_pid in proc_list:
@@ -2172,16 +2099,19 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text(f"🛑 Stopped task {pid_to_stop}!")
                 break
 
-        # 2) If not found, fallback to runtime map for single pid
         if not stopped_task:
             proc = running_processes.get(pid_to_stop)
             if proc:
-                try: proc.terminate()
-                except Exception: pass
+                try: 
+                    proc.terminate()
+                except Exception: 
+                    pass
                 await asyncio.sleep(2)
                 if proc.poll() is None:
-                    try: proc.kill()
-                    except Exception: pass
+                    try: 
+                        proc.kill()
+                    except Exception: 
+                        pass
                 running_processes.pop(pid_to_stop, None)
                 for t in persistent_tasks:
                     if t.get('pid') == pid_to_stop:
@@ -2302,14 +2232,11 @@ def main_bot():
     APP = application
     LOOP = asyncio.get_event_loop()
     
-    # Restore tasks
     restore_tasks_on_start()
     
-    # Start switch monitor
     monitor_thread = threading.Thread(target=switch_monitor, daemon=True)
     monitor_thread.start()
     
-    # Post init for notifications
     async def post_init(app):
         for user_id, tasks_list in list(users_tasks.items()):
             for task in tasks_list:
@@ -2369,13 +2296,13 @@ def main_bot():
     application.add_handler(conv_slogin)
     
     psid_handler = ConversationHandler(
-    entry_points=[CommandHandler("psid", psid_start)],
-    states={
-        PSID_SESSION: [MessageHandler(filters.TEXT & ~filters.COMMAND, psid_get_session)],
-        PSID_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, psid_get_username)],
-    },
-    fallbacks=[]
-)
+        entry_points=[CommandHandler("psid", psid_start)],
+        states={
+            PSID_SESSION: [MessageHandler(filters.TEXT & ~filters.COMMAND, psid_get_session)],
+            PSID_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, psid_get_username)],
+        },
+        fallbacks=[]
+    )
 
     application.add_handler(psid_handler)
 
