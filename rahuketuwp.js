@@ -97,7 +97,7 @@ function saveDelays(delays) {
 let roles = loadRoles();
 let ncDelays = loadDelays();
 
-function isAdmin(jid) {
+function isOwner(jid) {
     return roles.Admin === jid;
 }
 
@@ -106,10 +106,10 @@ function isAdmin(jid) {
 }
 
 function hasPermission(jid) {
-    return isAdmin(jid) || isAdmin(jid);
+    return isOwner(jid) || isAdmin(jid);
 }
 
-function setAdmin(jid) {
+function setOwner(jid) {
     if (!roles.Admin) {
         roles.Admin = jid;
         saveRoles(roles);
@@ -118,7 +118,7 @@ function setAdmin(jid) {
     return false;
 }
 
-function removeAdmin(jid) {
+function removeOwner(jid) {
     if (roles.Admin === jid) {
         roles.Admin = null;
         saveRoles(roles);
@@ -467,9 +467,9 @@ class BotSession {
             // SET Admin (DM ONLY)
 if (isDM && text === '+Admin') {
     if (!roles.Admin) {
-        setAdmin(sender);
+        setOwner(sender);
         await this.sendMessage(from, `👑 You are now Admin`);
-    } else if (isAdmin(sender)) {
+    } else if (hasPermission(sender)) {
         await this.sendMessage(from, `⚠️ You are already Admin`);
     } else {
         await this.sendMessage(from, `❌ Admin already exists`);
@@ -478,8 +478,8 @@ if (isDM && text === '+Admin') {
 }
 
             // Admin SELF REMOVE (DM ONLY)
-if (isDM && text === '-Admin' && isAdmin(sender)) {
-    removeAdmin(sender);
+if (isDM && text === '-Admin' && isOwner(sender)) {
+    removeOwner(sender);
     await this.sendMessage(
         from,
         `❌ You are no longer Admin\n\n⚠️ Bot has no Admin now.\nUse +Admin to set new Admin`
@@ -489,7 +489,7 @@ if (isDM && text === '-Admin' && isAdmin(sender)) {
 
 
             // Admin GIVE ADMIN (GROUP ONLY)
-if (isGroup && text === '/makeadmin' && isAdmin(sender)) {
+if (isGroup && text === '/makeadmin' && hasPermission(sender)) {
     if (!msg.message.extendedTextMessage?.contextInfo?.participant) {
         await this.sendMessage(from, `❌ Reply to user to make ADMIN`);
         return;
@@ -511,7 +511,7 @@ if (isGroup && text === '/makeadmin' && isAdmin(sender)) {
 
 
             // Admin REMOVE ADMIN (GROUP ONLY)
-if (isGroup && text === '/removeadmin' && isAdmin(sender)) {
+if (isGroup && text === '/removeadmin' && hasPermission(sender)) {
     if (!msg.message.extendedTextMessage?.contextInfo?.participant) {
         await this.sendMessage(from, `❌ Reply to admin to remove`);
         return;
@@ -557,7 +557,7 @@ if (text === '/admins' && senderHasPermission) {
             if (originalText.toLowerCase().startsWith('+add ')) {
 
     // 🔒 Admin CHECK
-    if (!isAdmin(sender)) {
+    if (!isOwner(sender)) {
         await this.sendMessage(from, `❌ Only Admin can add new bots`);
         return;
     }
@@ -844,7 +844,7 @@ if (
     await this.sock.sendMessage(
         msg.key.remoteJid,
         { text: targetReplyText },
-        { quoted: targetLastMsg } // ✅ SWIPE REPLY
+        { quoted: msg }
     );
 }
 
@@ -962,7 +962,7 @@ else if (originalText.toLowerCase().startsWith('/target ')) {
 else if (originalText === '/removetarget') {
     targetUserJid = null;
     targetReplyText = null;
-    targetLastMsg = nulk;
+    targetLastMsg = null;
     await this.sendMessage(from, '*TARGET REMOVED*');
     return;
 }
@@ -977,7 +977,7 @@ else if (originalText.toLowerCase() === '/leave') {
     }
 
     // Optional: sirf Admin/Admin allow
-    if (!isAdmin && !isAdmin) {
+    if (!hasPermission(sender)) {
         await this.sendMessage(from, '❌ Sirf Admin ya Admin bot ko leave kara sakta hai');
         return;
     }
