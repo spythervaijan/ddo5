@@ -794,9 +794,13 @@ and start your pretty chaos 💌⚡
 """)
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+
     if not is_authorized(user_id):
-        await update.message.reply_text("⚠️ You are not authorised to use, dm owner to gain access! @BARBIE 💓 ⚠️")
+        await update.message.reply_text(
+            "⚠️ You are not authorised to use, dm owner to gain access! @BARBIE 💓 ⚠️"
+        )
         return
+
     help_text = """
 💖✨ Barbie Spam Bot ✨💖
 🎀 Pretty Command Guide 🎀
@@ -835,10 +839,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
  /help 🪄 - Show this help menu
  /viewpref ⚙️ - View preferences
  /usg 📊 - System usage
-
 """
-if is_owner(user_id):
-    help_text += """
+
+    if is_owner(user_id):
+        help_text += """
 ━━━━━━━━━━━━━━━
 👑 ADMIN QUEEN COMMANDS
 ━━━━━━━━━━━━━━━
@@ -847,6 +851,7 @@ if is_owner(user_id):
  /users 📜 - List authorized users
  /flush 🧹 - Stop all tasks globally
 """
+
     await update.message.reply_text(help_text)
 
 async def psid_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
