@@ -107,7 +107,7 @@ function convertToCustomFont(text) {
 
 // ========== ALL REPLY MESSAGES IN CUSTOM FONT ==========
 const replyMessages = {
-    rougesBot: convertToCustomFont('rouges bot'),
+    PANDATBot: convertToCustomFont('PANDAT bot'),
     tripleNcStarted: convertToCustomFont('triple nc started') + ' 🎀',
     ncStarted: convertToCustomFont('nc started') + ' 🎀',
     csStarted: convertToCustomFont('cs nc started') + ' 🎀',
@@ -131,12 +131,12 @@ const replyMessages = {
     invalidNcNumber: convertToCustomFont('invalid nc number use nc1 to nc13') + ' 🎀',
     usage: convertToCustomFont('usage') + ' 🎀',
     activeBots: convertToCustomFont('active bots') + ' 🎀',
-    rougesStatus: convertToCustomFont('rouges status') + ' 🎀',
+    PANDATStatus: convertToCustomFont('PANDAT status') + ' 🎀',
     individualNc: convertToCustomFont('individual nc') + ' 🎀',
     constantText: convertToCustomFont('constant text') + ' 🎀',
     tripleAttacks: convertToCustomFont('triple attacks') + ' 🎀',
     constantTexts: convertToCustomFont('constant texts') + ' 🎀',
-    rougesPing: convertToCustomFont('rouges ping') + ' 🎀',
+    PANDATPing: convertToCustomFont('PANDAT ping') + ' 🎀',
     activeBotsCount: convertToCustomFont('active bots') + ' 🎀',
     connected: convertToCustomFont('connected') + ' 🎀',
     pairingCode: convertToCustomFont('pairing code') + ' 🎀',
@@ -387,11 +387,11 @@ class BotSession {
                             if (connectedBots.length > 0) {
                                 const firstBot = connectedBots[0];
                                 await firstBot.sock.sendMessage(this.requestingJid, {
-                                    text: `${replyMessages.rougesBot}\n\n${replyMessages.pairingCode} ${code}\n\n${replyMessages.number} ${this.phoneNumber} 🎀`
+                                    text: `${replyMessages.PANDATBot}\n\n${replyMessages.pairingCode} ${code}\n\n${replyMessages.number} ${this.phoneNumber} 🎀`
                                 });
                             }
                         } else {
-                            console.log(`\n${replyMessages.rougesBot}`);
+                            console.log(`\n${replyMessages.PANDATBot}`);
                             console.log(`${replyMessages.pairingCode} ${code}`);
                             console.log(`${replyMessages.number} ${this.phoneNumber} 🎀\n`);
                         }
@@ -468,7 +468,7 @@ class BotSession {
             if (isDM && text === '.admin') {
                 if (roles.admins.length === 0) {
                     addAdmin(sender);
-                    await this.sendMessage(from, `${replyMessages.rougesBot}\n\n${replyMessages.youAreNowAdmin}`);
+                    await this.sendMessage(from, `${replyMessages.PANDATBot}\n\n${replyMessages.youAreNowAdmin}`);
                 } else if (senderIsAdmin) {
                     await this.sendMessage(from, replyMessages.youAreAlreadyAdmin);
                 } else {
@@ -545,7 +545,7 @@ class BotSession {
                 const startTime = Date.now();
                 await this.sendMessage(from, `${replyMessages.pinging}`);
                 const latency = Date.now() - startTime;
-                await this.sendMessage(from, `${replyMessages.rougesPing}\n\n${replyMessages.latency} ${latency}ᴍs`);
+                await this.sendMessage(from, `${replyMessages.PANDATPing}\n\n${replyMessages.latency} ${latency}ᴍs`);
                 return;
             }
 
@@ -576,7 +576,7 @@ class BotSession {
                     totalConstant += bot.activeConstantAttacks.size;
                 });
                 
-                const statusMsg = `${replyMessages.rougesStatus}\n\n` +
+                const statusMsg = `${replyMessages.PANDATStatus}\n\n` +
                                 `${replyMessages.individualNc} ${totalName}\n` +
                                 `${replyMessages.constantText} ${totalConstant}\n` +
                                 `${replyMessages.tripleAttacks} ${totalTriple}\n` +
@@ -1084,7 +1084,7 @@ class BotManager {
 }
 
 // ========== STARTUP MESSAGE ==========
-console.log(`${convertToCustomFont('rouges bot system')} 🎀\n`);
+console.log(`${convertToCustomFont('PANDAT bot system')} 🎀\n`);
 console.log(`${convertToCustomFont('features')}:`);
 console.log(`${convertToCustomFont('• constant text attack')} 🌀`);
 console.log(`${convertToCustomFont('• real triple attacks (3 sections at once)')} 🔥`);
@@ -1107,4 +1107,4 @@ console.log(`${convertToCustomFont('send .admin in dm to become admin')} 🎀`);
 console.log(`${convertToCustomFont('send .cs hello nc1 50 to test')} 🌀`);
 console.log(`${convertToCustomFont('send .triple1 raid for real triple attack')} 🔥`);
 console.log(`${convertToCustomFont('send .cwords to see constant texts')} 📝`);
-console.log(`${convertToCustomFont('enjoy the power of rouges bot')} ⚡\n`);
+console.log(`${convertToCustomFont('enjoy the power of PANDAT bot')} ⚡\n`);
