@@ -14,8 +14,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-TOKEN = "7027878961:AAH_GnKIGiy_wCHfg3nZaTVdwWLvtDpgMvg"
-OWNER_ID = 5926435353
+TOKEN = "8134663359:AAEuqkajq5d1rwRiv6e83hZ8CWlcDv9G3po"
+OWNER_ID = 5879359815
 
 DB_FILE = "db.json"
 
@@ -141,7 +141,7 @@ def authorised(user_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
-        "👋 Welcome\n\nUse /help to see commands"
+        "👋 Welcome to KING OF GODS DDOS BOT\n\nUse /help to see commands"
     )
 
 
@@ -297,7 +297,7 @@ Time : {duration}s"""
         print("Attack error:", e)
 
         await update.message.reply_text(
-            "Usage: /attack ip port time"
+            "⚠️Usage: /attack ip port time"
         )
 
 
