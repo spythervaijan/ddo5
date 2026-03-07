@@ -12,8 +12,8 @@ from playwright.async_api import async_playwright
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = "8030324408:AAG8btYkCUba0oW-nB_JxkaWJqz6KVCrdS8"
-OWNER_ID = 5193826370
+TOKEN = "8134663359:AAHMr7e5wMxsq9nGR6eFjpx35nEpoaoblj8"
+OWNER_ID = 5879359815
 
 DB_FILE = "db.json"
 
