@@ -319,7 +319,11 @@ async def main():
 
     print("Bot started...")
 
-    await app.run_polling()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
