@@ -288,7 +288,7 @@ Remaining time: {duration}s"""
 
 
 # ---------------- MAIN ---------------- #
-async def main():
+def main():
     # Initialize Playwright BEFORE starting bot
     await init_playwright()
 
@@ -308,8 +308,8 @@ async def main():
     app.add_handler(CommandHandler("attack", attack))
 
     print("🚀 Spyther DDoS Bot started (production stable version)")
-    await app.run_polling()
+    app.run_polling()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
