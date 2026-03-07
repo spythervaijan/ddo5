@@ -5,7 +5,7 @@ import random
 import string
 from datetime import datetime, timedelta
 
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 from telegram import Update
 from telegram.error import RetryAfter, TelegramError
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -41,14 +41,13 @@ browser = None
 page = None
 
 # ---------------- PLAYWRIGHT (NON-BLOCKING) ---------------- #
-def init_playwright():
+async def init_playwright():
     global playwright_instance, browser, page
-    playwright_instance = sync_playwright().start()
-    browser = playwright_instance.chromium.launch(headless=False)
-    context = browser.new_context()
-    page = context.new_page()
-    page.goto("https://satellitestress.st/attack")
-    print("✅ Playwright browser ready")
+    playwright_instance = await async_playwright().start()
+    browser = await playwright_instance.chromium.launch(headless=False)
+    context = await browser.new_context()
+    page = await context.new_page()
+    await page.goto("https://satellitestress.st/attack")
 
 
 def launch_attack_action(ip: str, port: str, duration: int) -> bool:
@@ -291,7 +290,7 @@ Remaining time: {duration}s"""
 # ---------------- MAIN ---------------- #
 async def main():
     # Initialize Playwright BEFORE starting bot
-    init_playwright()
+    await init_playwright()
 
     app = (
         ApplicationBuilder()
