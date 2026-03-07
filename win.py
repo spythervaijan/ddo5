@@ -258,9 +258,14 @@ async def main():
     app.add_handler(CommandHandler("when", when))
     app.add_handler(CommandHandler("attack", attack))
 
-    print("Bot started... (Windows fixed - Proactor loop + non-blocking attack)")
+    print("Bot started...")
 
-    await app.run_polling()
+    return app
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    app = loop.run_until_complete(main())
+    app.run_polling()
