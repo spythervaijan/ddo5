@@ -6,7 +6,6 @@ import asyncio
 from datetime import datetime
 from playwright.async_api import async_playwright
 
-# ==================== SPYTHER v1 BANNER ====================
 try:
     from cfonts import render
 except ImportError:
@@ -63,13 +62,13 @@ def save_pairs(pairs):
     with open(PAIRS_FILE, 'w', encoding='utf-8') as f:
         json.dump(pairs, f, indent=2)
 
-# ==================== REAL SESSION TEST (Tere example jaisa) ====================
+# ==================== TERA STYLE SESSION TEST ====================
 async def test_sessionid(sessionid: str):
-    """Session ID test + full storage_state return"""
-    print("🔄 Testing sessionid with Playwright (please wait 8-10 seconds)...")
+    """Tere diye code jaisa - sessionid test + full storage_state"""
+    print("🔄 Testing sessionid with Playwright (8-10 seconds wait)...")
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=LAUNCH_ARGS)
+            browser = await p.chromium.launch(headless=False, args=LAUNCH_ARGS)
             context = await browser.new_context(
                 user_agent=MOBILE_UA,
                 viewport=MOBILE_VIEWPORT,
@@ -79,7 +78,6 @@ async def test_sessionid(sessionid: str):
                 color_scheme="dark"
             )
 
-            # Add only sessionid first
             await context.add_cookies([{
                 "name": "sessionid",
                 "value": sessionid.strip(),
@@ -94,7 +92,7 @@ async def test_sessionid(sessionid: str):
             await page.goto("https://www.instagram.com/", timeout=60000)
             await asyncio.sleep(8)  # Important wait
 
-            # Check if logged in
+            # Check login status
             login_count = await page.locator("text=Log in").count()
             success = login_count == 0
 
@@ -107,14 +105,13 @@ async def test_sessionid(sessionid: str):
         print(f"Test error: {e}")
         return False, None
 
-# ==================== run_with_account using FULL STORAGE STATE ====================
+# ==================== SENDING with FULL STORAGE STATE ====================
 async def run_with_account(state: dict, account_name: str, thread_urls: list, tabs_per_url: int, messages: list, headless: bool):
-    """Uses full storage_state (most stable method)"""
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless, args=LAUNCH_ARGS)
         
         context = await browser.new_context(
-            storage_state=state,   # ← Yeh line sabse zaroori hai
+            storage_state=state,   # ← Full state (sabse stable)
             user_agent=MOBILE_UA,
             viewport=MOBILE_VIEWPORT,
             is_mobile=True,
@@ -123,7 +120,7 @@ async def run_with_account(state: dict, account_name: str, thread_urls: list, ta
             color_scheme="dark"
         )
 
-        print(f"[{account_name}] ✅ Full storage state loaded successfully")
+        print(f"[{account_name}] ✅ Full storage state loaded")
 
         dm_selector = '[contenteditable="true"][role="textbox"]'
         pages = []
@@ -135,32 +132,28 @@ async def run_with_account(state: dict, account_name: str, thread_urls: list, ta
                     page = await context.new_page()
                     page_list.append((page, url))
 
-            # Initialize all tabs
             init_tasks = [asyncio.create_task(init_page(page, url, dm_selector)) for page, url in page_list]
             results = await asyncio.gather(*init_tasks, return_exceptions=True)
 
             for i, success in enumerate(results):
                 if not isinstance(success, Exception) and success:
                     pages.append(page_list[i][0])
-                    print(f"[{account_name}] Tab {len(pages)} ready for DM")
+                    print(f"[{account_name}] Tab {len(pages)} ready")
                 else:
-                    print(f"[{account_name}] Tab {i+1} failed to initialize")
+                    print(f"[{account_name}] Tab {i+1} init failed")
 
             if not pages:
-                print(f"[{account_name}] No tabs initialized. Session may be invalid.")
+                print(f"[{account_name}] No tabs initialized.")
                 return
 
-            # Start sending
             tasks = [asyncio.create_task(sender(i+1, messages, context, pages[i], account_name)) 
                      for i in range(len(pages))]
             await asyncio.gather(*tasks, return_exceptions=True)
 
         finally:
             for page in pages:
-                try:
-                    await page.close()
-                except:
-                    pass
+                try: await page.close()
+                except: pass
             await context.close()
             await browser.close()
 
@@ -193,13 +186,13 @@ async def sender(tab_id, messages, context, page, account_name):
             await current_page.click(dm_selector)
             await current_page.fill(dm_selector, msg)
             await current_page.press(dm_selector, 'Enter')
-            print(f"[{account_name}] Tab {tab_id} sent message {msg_index+1}")
+            print(f"[{account_name}] Tab {tab_id} sent {msg_index+1}")
         except Exception as e:
             print(f"[{account_name}] Tab {tab_id} error: {e}")
         await asyncio.sleep(0.25)
         msg_index = (msg_index + 1) % len(messages)
 
-# ==================== MAIN FUNCTION ====================
+# ==================== MAIN MENU ====================
 async def main():
     print_spyther_banner()
     accounts = load_accounts()
@@ -210,33 +203,30 @@ async def main():
         print("\n" + "═"*80)
         print("                    SPYTHER v1 - MAIN MENU")
         print("═"*80)
-        print("1. Add New Account (Session ID Test + Full State)")
+        print("1. Add New Account (Session ID → Full State)")
         print("2. List Saved Accounts")
-        print("3. Create Account Pair / Sequence")
-        print("4. List & Manage Pairs (unpair all)")
-        print("5. Set Account Switch Interval")
-        print("6. Start Auto Sender (With Pair OR Single Account)")
+        print("3. Create Account Pair")
+        print("4. Manage Pairs")
+        print("5. Set Switch Interval")
+        print("6. Start Sender")
         print("0. Exit")
         print("═"*80)
 
-        choice = input("\nChoose option: ").strip()
+        choice = input("\nChoose: ").strip()
 
         if choice == "1":
-            name = input("Enter account nickname (e.g. acc1): ").strip()
-            if not name:
-                continue
-            sessionid = input("Paste Instagram sessionid cookie: ").strip()
+            name = input("Account nickname: ").strip()
+            if not name: continue
+            sessionid = input("Paste sessionid: ").strip()
             if not sessionid:
-                print("Sessionid cannot be empty.")
+                print("Sessionid empty.")
                 continue
 
             success, state = await test_sessionid(sessionid)
-            if not success or state is None:
-                print("❌ Session test FAILED (redirected to login page).")
-                print("   Please use a fresh sessionid from a logged-in browser.")
+            if not success or not state:
+                print("❌ Test FAILED - Redirected to login. Fresh sessionid use kar.")
                 continue
 
-            # Save account with full storage_state
             accounts[name] = {
                 "storage_state": state,
                 "sessionid": sessionid,
@@ -244,145 +234,136 @@ async def main():
                 "added": str(datetime.now())
             }
             save_accounts(accounts)
-            print(f"✅ Account '{name}' added successfully! (Full storage state saved)")
+            print(f"✅ '{name}' saved with full storage state!")
 
         elif choice == "2":
             if not accounts:
-                print("No accounts saved.")
+                print("No accounts.")
             else:
-                print("\nSaved Accounts:")
                 for i, (n, d) in enumerate(accounts.items(), 1):
-                    print(f"{i}. {n} → Full State Saved")
+                    print(f"{i}. {n} (Full State)")
 
         elif choice == "3":
             if not accounts:
-                print("Add at least one account first.")
+                print("Pehle account add kar.")
                 continue
             acc_list = list(accounts.keys())
             for i, n in enumerate(acc_list, 1):
                 print(f"{i}. {n}")
-            sel = input("\nEnter account numbers in order (space separated): ").strip()
+            sel = input("Numbers space separated: ").strip()
             indices = [int(x)-1 for x in sel.split() if x.isdigit()]
             seq = [acc_list[i] for i in indices if 0 <= i < len(acc_list)]
             if seq:
-                pname = input("Enter pair name: ").strip()
+                pname = input("Pair name: ").strip()
                 pairs[pname] = seq
                 save_pairs(pairs)
-                print(f"✅ Pair '{pname}' created: {' → '.join(seq)}")
+                print(f"Pair '{pname}' created.")
 
         elif choice == "4":
             if not pairs:
-                print("No pairs created yet.")
+                print("No pairs.")
                 continue
-            for pname, seq in pairs.items():
-                print(f"• {pname}: {' → '.join(seq)}")
-            act = input("\nEnter pair name to delete or type 'unpair all': ").strip()
+            for p, s in pairs.items():
+                print(f"• {p}: {' → '.join(s)}")
+            act = input("Delete pair or 'unpair all': ").strip()
             if act.lower() == "unpair all":
                 pairs.clear()
                 save_pairs(pairs)
-                print("✅ All pairs deleted.")
+                print("All unpaired.")
             elif act in pairs:
                 del pairs[act]
                 save_pairs(pairs)
-                print(f"✅ Pair '{act}' deleted.")
+                print(f"Deleted {act}")
 
         elif choice == "5":
             try:
-                m = int(input(f"Enter switch interval in minutes (current: {switch_interval}): "))
+                m = int(input(f"Minutes (current {switch_interval}): "))
                 if m > 0:
                     switch_interval = m
-                    print(f"✅ Switch interval set to {switch_interval} minutes.")
+                    print(f"Interval {switch_interval} min set.")
             except:
-                print("Invalid number.")
+                print("Invalid.")
 
         elif choice == "6":
-            print("\n1. Use Pair (Auto Switch)")
-            print("2. Single Account (No Switching)")
-            mode = input("Choose 1 or 2: ").strip()
-
+            # Pair ya Single select (same as before)
+            print("\n1. Pair mode\n2. Single account")
+            mode = input("Choose: ").strip()
             if mode == "1":
-                if not pairs:
-                    print("No pairs created.")
+                if not pairs: 
+                    print("No pairs.")
                     continue
-                for i, pn in enumerate(pairs.keys(), 1):
+                for i, pn in enumerate(pairs, 1):
                     print(f"{i}. {pn}")
-                try:
-                    idx = int(input("Select pair number: ")) - 1
-                    pair_name = list(pairs.keys())[idx]
-                    current_accounts = pairs[pair_name]
-                    use_pair = True
-                except:
-                    print("Invalid selection.")
-                    continue
+                idx = int(input("Select: ")) - 1
+                current_accounts = pairs[list(pairs.keys())[idx]]
+                use_pair = True
             else:
                 if not accounts:
-                    print("No accounts saved.")
+                    print("No accounts.")
                     continue
-                for i, n in enumerate(accounts.keys(), 1):
+                for i, n in enumerate(accounts, 1):
                     print(f"{i}. {n}")
-                try:
-                    idx = int(input("Select account number: ")) - 1
-                    current_accounts = [list(accounts.keys())[idx]]
-                    use_pair = False
-                except:
-                    print("Invalid selection.")
-                    continue
+                idx = int(input("Select: ")) - 1
+                current_accounts = [list(accounts.keys())[idx]]
+                use_pair = False
 
-            urls_input = input("\nEnter Thread URL(s) (comma separated): ").strip()
-            thread_urls = [u.strip() for u in urls_input.split(',') if u.strip()]
-
-            tabs_str = input("Tabs per thread (1-5): ").strip()
-            tabs_per_url = max(1, min(5, int(tabs_str) if tabs_str.isdigit() else 1))
-
-            msg_file = input("Messages .txt file full path: ").strip()
+            urls = [u.strip() for u in input("Thread URLs (comma): ").split(',') if u.strip()]
+            tabs_per = max(1, min(5, int(input("Tabs per URL (1-5): ") or 1)))
+            msg_file = input("Messages .txt path: ").strip()
             try:
-                messages = parse_messages(msg_file)
-                print(f"✅ Loaded {len(messages)} messages.")
+                messages = parse_messages(msg_file)   # define parse_messages if missing
+                print(f"{len(messages)} messages loaded.")
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"Messages error: {e}")
                 continue
 
-            headless_input = input("Headless mode? (y/n, default y): ").strip().lower()
-            headless = headless_input != 'n'
-
-            print(f"\n🚀 Starting Sender | Mode: {'Pair Switch' if use_pair else 'Single Account'}")
+            headless = input("Headless? (y/n default y): ").strip().lower() != 'n'
 
             account_index = 0
             try:
                 while True:
-                    curr_name = current_accounts[account_index]
-                    state = accounts[curr_name]["storage_state"]
-                    print(f"\n{'═'*20} ACCOUNT: {curr_name.upper()} {'═'*20}")
-
+                    curr = current_accounts[account_index]
+                    state = accounts[curr]["storage_state"]
+                    print(f"\n{'═'*15} {curr.upper()} {'═'*15}")
                     try:
-                        timeout_sec = switch_interval * 60 if use_pair else None
-                        if timeout_sec:
+                        if use_pair:
                             await asyncio.wait_for(
-                                run_with_account(state, curr_name, thread_urls, tabs_per_url, messages, headless),
-                                timeout=timeout_sec
+                                run_with_account(state, curr, urls, tabs_per, messages, headless),
+                                timeout=switch_interval * 60
                             )
                         else:
-                            await run_with_account(state, curr_name, thread_urls, tabs_per_url, messages, headless)
+                            await run_with_account(state, curr, urls, tabs_per, messages, headless)
                     except asyncio.TimeoutError:
-                        print("⏰ Time up → Switching account...")
+                        print("Switching account...")
                     except KeyboardInterrupt:
                         raise
                     except Exception as e:
-                        print(f"Error with {curr_name}: {e}")
+                        print(f"Error: {e}")
 
                     if not use_pair:
-                        print("Single mode running... Press Ctrl+C to stop")
                         await asyncio.sleep(3600)
                     else:
                         account_index = (account_index + 1) % len(current_accounts)
             except KeyboardInterrupt:
-                print("\n🛑 Stopped by user.")
+                print("\nStopped.")
 
         elif choice == "0":
-            print("Thank you for using SPYTHER v1!")
+            print("Bye!")
             break
+
         else:
-            print("Invalid option.")
+            print("Invalid choice.")
+
+# parse_messages function (missing tha)
+def parse_messages(file_path):
+    if not os.path.exists(file_path):
+        raise ValueError(f"File not found: {file_path}")
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    content = content.replace('﹠', '&').replace('＆', '&').replace('⅋', '&')
+    pattern = r'\s*(?:&|\band\b)\s*'
+    parts = [part.strip() for part in re.split(pattern, content, flags=re.IGNORECASE) if part.strip()]
+    return parts
 
 if __name__ == "__main__":
     asyncio.run(main())
