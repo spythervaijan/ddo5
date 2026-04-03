@@ -6,7 +6,6 @@ import asyncio
 from datetime import datetime
 from playwright.async_api import async_playwright
 
-# ==================== SPYTHER v1 BANNER ====================
 try:
     from cfonts import render
 except ImportError:
@@ -33,7 +32,7 @@ def print_spyther_banner():
             pass
     print("═" * 85)
     print("              Instagram DM Auto Sender - Multi Account Switcher")
-    print("                 Pairs + Auto Switch + Session ID Support")
+    print("                 Pairs + Single Mode + Session ID Validation")
     print("═" * 85)
 
 def load_accounts():
@@ -62,30 +61,71 @@ def save_pairs(pairs):
     with open(PAIRS_FILE, 'w', encoding='utf-8') as f:
         json.dump(pairs, f, indent=2)
 
-def create_storage_from_sessionid(sessionid: str, storage_path: str):
-    """Sessionid se storage_state.json bana deta hai"""
-    storage_state = {
-        "cookies": [
-            {
-                "name": "sessionid",
-                "value": sessionid.strip(),
-                "domain": ".instagram.com",
-                "path": "/",
-                "expires": -1,
-                "httpOnly": True,
-                "secure": True,
-                "sameSite": "Lax"
+async def validate_sessionid(sessionid: str):
+    """Real validation: Browser launch karke check karta hai session valid hai ya nahi"""
+    print("Validating sessionid on Instagram...")
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=LAUNCH_ARGS)
+            context = await browser.new_context(
+                user_agent=MOBILE_UA,
+                viewport=MOBILE_VIEWPORT,
+                is_mobile=True,
+                has_touch=True,
+                device_scale_factor=2,
+                color_scheme="dark"
+            )
+            # Temporary storage with only sessionid
+            temp_storage = {
+                "cookies": [{
+                    "name": "sessionid",
+                    "value": sessionid.strip(),
+                    "domain": ".instagram.com",
+                    "path": "/",
+                    "httpOnly": True,
+                    "secure": True,
+                    "sameSite": "Lax"
+                }]
             }
-        ],
+            await context.add_cookies(temp_storage["cookies"])
+            page = await context.new_page()
+            await page.goto("https://www.instagram.com/", timeout=45000)
+            await asyncio.sleep(4)  # Wait for possible redirect
+
+            current_url = page.url
+            if "accounts/login" in current_url or "login" in current_url.lower():
+                await browser.close()
+                return False, "Session ID invalid or expired (redirected to login page)."
+            
+            # Extra check - try to see if home or feed loads
+            if "instagram.com" in current_url and not any(x in current_url for x in ["login", "accounts"]):
+                await browser.close()
+                return True, "Session ID is valid."
+            
+            await browser.close()
+            return False, "Could not confirm session validity."
+    except Exception as e:
+        return False, f"Validation error: {e}"
+
+def create_storage_from_sessionid(sessionid: str, storage_path: str):
+    storage_state = {
+        "cookies": [{
+            "name": "sessionid",
+            "value": sessionid.strip(),
+            "domain": ".instagram.com",
+            "path": "/",
+            "expires": -1,
+            "httpOnly": True,
+            "secure": True,
+            "sameSite": "Lax"
+        }],
         "origins": []
     }
     try:
         with open(storage_path, 'w', encoding='utf-8') as f:
             json.dump(storage_state, f, indent=2)
-        print(f"✅ Storage state created from sessionid → {storage_path}")
         return True
-    except Exception as e:
-        print(f"❌ Failed to create storage: {e}")
+    except:
         return False
 
 def parse_messages(file_path):
@@ -98,6 +138,7 @@ def parse_messages(file_path):
     parts = [part.strip() for part in re.split(pattern, content, flags=re.IGNORECASE) if part.strip()]
     return parts
 
+# Sender aur run_with_account functions same rakhe hain (pehle wale jaise)
 async def init_page(page, url, dm_selector):
     for _ in range(3):
         try:
@@ -114,7 +155,6 @@ async def sender(tab_id, messages, context, page, account_name):
     current_page = page
     cycle_start = time.time()
     msg_index = 0
-
     while True:
         if time.time() - cycle_start >= 60:
             try:
@@ -123,16 +163,14 @@ async def sender(tab_id, messages, context, page, account_name):
             except:
                 pass
             cycle_start = time.time()
-
         msg = messages[msg_index]
         try:
             await current_page.click(dm_selector)
             await current_page.fill(dm_selector, msg)
             await current_page.press(dm_selector, 'Enter')
-            print(f"[{account_name}] Tab {tab_id} sent: {msg_index+1}")
+            print(f"[{account_name}] Tab {tab_id} sent message {msg_index+1}")
         except Exception as e:
             print(f"[{account_name}] Tab {tab_id} error: {e}")
-
         await asyncio.sleep(0.25)
         msg_index = (msg_index + 1) % len(messages)
 
@@ -148,11 +186,8 @@ async def run_with_account(storage_path, account_name, thread_urls, tabs_per_url
             device_scale_factor=2,
             color_scheme="dark"
         )
-
         dm_selector = '[contenteditable="true"][role="textbox"]'
         pages = []
-        tasks = []
-
         try:
             page_list = []
             for url in thread_urls:
@@ -165,8 +200,7 @@ async def run_with_account(storage_path, account_name, thread_urls, tabs_per_url
 
             for i, success in enumerate(results):
                 if not isinstance(success, Exception) and success:
-                    page, url = page_list[i]
-                    pages.append(page)
+                    pages.append(page_list[i][0])
                     print(f"[{account_name}] Tab {len(pages)} ready")
 
             if not pages:
@@ -174,10 +208,8 @@ async def run_with_account(storage_path, account_name, thread_urls, tabs_per_url
                 return
 
             tasks = [asyncio.create_task(sender(i+1, messages, context, pages[i], account_name)) 
-                    for i in range(len(pages))]
-
+                     for i in range(len(pages))]
             await asyncio.gather(*tasks, return_exceptions=True)
-
         finally:
             for page in pages:
                 await page.close()
@@ -186,7 +218,6 @@ async def run_with_account(storage_path, account_name, thread_urls, tabs_per_url
 
 async def main():
     print_spyther_banner()
-    
     accounts = load_accounts()
     pairs = load_pairs()
     switch_interval = 60
@@ -200,157 +231,180 @@ async def main():
         print("3. Create Account Pair / Sequence")
         print("4. List & Manage Pairs (unpair all)")
         print("5. Set Account Switch Interval")
-        print("6. Start Auto Sender")
+        print("6. Start Auto Sender (With Pair OR Single Account)")
         print("0. Exit")
         print("═"*80)
 
         choice = input("\nChoose option: ").strip()
 
         if choice == "1":
-            name = input("Enter account nickname (e.g. acc1, mainacc): ").strip()
-            if not name:
-                print("Name required.")
-                continue
+            name = input("Enter account nickname: ").strip()
+            if not name: continue
 
-            print("\nChoose login method:")
-            print("1. Full storage_state.json path")
-            print("2. Only sessionid cookie (script will create storage)")
-            method = input("Enter 1 or 2: ").strip()
+            print("\n1. Full storage_state.json path")
+            print("2. Only sessionid (with validation)")
+            method = input("Choose 1 or 2: ").strip()
 
             if method == "1":
                 path = input("Enter full path of storage_state.json: ").strip()
                 if os.path.exists(path):
                     accounts[name] = {"storage_path": path, "type": "storage", "added": str(datetime.now())}
                     save_accounts(accounts)
-                    print(f"✅ Account '{name}' added using storage file!")
-                else:
-                    print("❌ File not found.")
-
+                    print(f"✅ Account '{name}' added!")
             elif method == "2":
-                sessionid = input("Enter Instagram sessionid cookie value: ").strip()
+                sessionid = input("Paste Instagram sessionid: ").strip()
                 if sessionid:
-                    storage_path = f"storage_{name}.json"
-                    if create_storage_from_sessionid(sessionid, storage_path):
-                        accounts[name] = {"storage_path": storage_path, "type": "sessionid", "added": str(datetime.now())}
-                        save_accounts(accounts)
-                        print(f"✅ Account '{name}' added using sessionid!")
+                    valid, msg = await validate_sessionid(sessionid)
+                    print(msg)
+                    if valid:
+                        storage_path = f"storage_{name}.json"
+                        if create_storage_from_sessionid(sessionid, storage_path):
+                            accounts[name] = {"storage_path": storage_path, "type": "sessionid", "added": str(datetime.now())}
+                            save_accounts(accounts)
+                            print(f"✅ Account '{name}' added successfully!")
                     else:
-                        print("Failed to create storage from sessionid.")
-                else:
-                    print("Sessionid cannot be empty.")
+                        print("❌ Session ID rejected. Try getting a fresh one.")
 
         elif choice == "2":
             if not accounts:
                 print("No accounts saved.")
             else:
                 print("\nSaved Accounts:")
-                for i, (name, data) in enumerate(accounts.items(), 1):
-                    typ = data.get("type", "unknown")
-                    print(f"{i}. {name} → {data['storage_path']} ({typ})")
+                for i, (n, d) in enumerate(accounts.items(), 1):
+                    print(f"{i}. {n} → {d['storage_path']} ({d.get('type','storage')})")
 
-        # Baaki options (3,4,5,6) bilkul same hain jaise pehle the
         elif choice == "3":
-            if len(accounts) < 1:
-                print("Add at least one account first.")
+            # Pair creation same as before
+            if not accounts:
+                print("Add accounts first.")
                 continue
-            print("\nAvailable Accounts:")
             acc_list = list(accounts.keys())
             for i, n in enumerate(acc_list, 1):
                 print(f"{i}. {n}")
-            selected = input("\nEnter account numbers in order (space separated): ").strip()
-            indices = [int(x)-1 for x in selected.split() if x.isdigit()]
-            sequence = [acc_list[i] for i in indices if 0 <= i < len(acc_list)]
-            if sequence:
-                pair_name = input("Enter pair name: ").strip()
-                pairs[pair_name] = sequence
+            sel = input("\nAccount numbers in order (space separated): ").strip()
+            indices = [int(x)-1 for x in sel.split() if x.isdigit()]
+            seq = [acc_list[i] for i in indices if 0 <= i < len(acc_list)]
+            if seq:
+                pname = input("Pair name: ").strip()
+                pairs[pname] = seq
                 save_pairs(pairs)
-                print(f"✅ Pair '{pair_name}' created: {' → '.join(sequence)}")
+                print(f"Pair '{pname}' created: {' → '.join(seq)}")
 
         elif choice == "4":
+            # Same as before
             if not pairs:
-                print("No pairs yet.")
+                print("No pairs.")
                 continue
-            print("\nExisting Pairs:")
-            for name, seq in pairs.items():
-                print(f"• {name}: {' → '.join(seq)}")
-            action = input("\nDelete pair name (or 'unpair all'): ").strip()
-            if action.lower() == "unpair all":
+            for pname, seq in pairs.items():
+                print(f"• {pname}: {' → '.join(seq)}")
+            act = input("\nDelete pair name or 'unpair all': ").strip()
+            if act.lower() == "unpair all":
                 pairs.clear()
                 save_pairs(pairs)
                 print("All pairs deleted.")
-            elif action in pairs:
-                del pairs[action]
+            elif act in pairs:
+                del pairs[act]
                 save_pairs(pairs)
-                print(f"Pair '{action}' deleted.")
+                print(f"Pair '{act}' deleted.")
 
         elif choice == "5":
             try:
-                mins = int(input(f"Enter switch interval in minutes (current: {switch_interval}): "))
-                if mins > 0:
-                    switch_interval = mins
-                    print(f"Switch interval set to {switch_interval} minutes.")
-            except:
-                print("Invalid number.")
-
-        elif choice == "6":
-            if not pairs:
-                print("Create a pair first.")
-                continue
-            print("\nAvailable Pairs:")
-            for i, name in enumerate(pairs.keys(), 1):
-                print(f"{i}. {name}")
-            try:
-                idx = int(input("Select pair number: ")) - 1
-                pair_name = list(pairs.keys())[idx]
-                current_pair = pairs[pair_name]
+                m = int(input(f"Switch interval in minutes (current {switch_interval}): "))
+                if m > 0:
+                    switch_interval = m
+                    print(f"Interval set to {switch_interval} minutes.")
             except:
                 print("Invalid.")
-                continue
 
+        elif choice == "6":
+            print("\n1. Use Pair (Auto Switch)")
+            print("2. Single Account (No Switching)")
+            mode = input("Choose 1 or 2: ").strip()
+
+            if mode == "1":
+                if not pairs:
+                    print("No pairs created. Create one first.")
+                    continue
+                print("\nPairs:")
+                for i, pn in enumerate(pairs.keys(), 1):
+                    print(f"{i}. {pn}")
+                try:
+                    idx = int(input("Select pair: ")) - 1
+                    pair_name = list(pairs.keys())[idx]
+                    current_accounts = pairs[pair_name]
+                    use_pair = True
+                except:
+                    print("Invalid.")
+                    continue
+            else:
+                if not accounts:
+                    print("No accounts saved.")
+                    continue
+                print("\nAvailable Accounts:")
+                for i, n in enumerate(accounts.keys(), 1):
+                    print(f"{i}. {n}")
+                try:
+                    idx = int(input("Select account: ")) - 1
+                    current_accounts = [list(accounts.keys())[idx]]
+                    use_pair = False
+                except:
+                    print("Invalid.")
+                    continue
+
+            # Common inputs
             urls_input = input("\nThread URLs (comma separated): ").strip()
             thread_urls = [u.strip() for u in urls_input.split(',') if u.strip()]
 
-            tabs_input = input("Tabs per thread (1-5): ").strip()
-            tabs_per_url = max(1, min(5, int(tabs_input) if tabs_input.isdigit() else 1))
+            tabs_str = input("Tabs per thread (1-5): ").strip()
+            tabs_per_url = max(1, min(5, int(tabs_str) if tabs_str.isdigit() else 1))
 
-            msg_file = input("Messages .txt file path: ").strip()
+            msg_file = input("Messages .txt file full path: ").strip()
             try:
                 messages = parse_messages(msg_file)
-                print(f"Loaded {len(messages)} messages.")
+                print(f"✅ Loaded {len(messages)} messages.")
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"Error loading messages: {e}")
                 continue
 
-            headless = input("Headless mode? (y/n): ").strip().lower() == 'y'
+            headless = input("Headless mode? (y/n default y): ").strip().lower() != 'n'
 
-            print(f"\nStarting with Pair: {pair_name} | Switch every {switch_interval} min")
+            print(f"\n🚀 Starting Sender | Mode: {'Pair Switch' if use_pair else 'Single Account'}")
 
             account_index = 0
             try:
                 while True:
-                    current_account = current_pair[account_index]
-                    storage_path = accounts[current_account]["storage_path"]
-                    print(f"\n{'═'*15} SWITCHED TO → {current_account.upper()} {'═'*15}")
-                    
+                    curr_name = current_accounts[account_index]
+                    storage = accounts[curr_name]["storage_path"]
+                    print(f"\n{'═'*20} ACCOUNT: {curr_name.upper()} {'═'*20}")
+
                     try:
-                        await asyncio.wait_for(
-                            run_with_account(storage_path, current_account, thread_urls, 
-                                           tabs_per_url, messages, headless),
-                            timeout=switch_interval * 60
-                        )
+                        timeout_sec = switch_interval * 60 if use_pair else None
+                        if timeout_sec:
+                            await asyncio.wait_for(
+                                run_with_account(storage, curr_name, thread_urls, tabs_per_url, messages, headless),
+                                timeout=timeout_sec
+                            )
+                            print("⏰ Switch time reached → changing account")
+                        else:
+                            await run_with_account(storage, curr_name, thread_urls, tabs_per_url, messages, headless)
                     except asyncio.TimeoutError:
-                        print("Time up → Switching account...")
+                        pass
+                    except KeyboardInterrupt:
+                        raise
                     except Exception as e:
-                        print(f"Error in {current_account}: {e}")
-                    
-                    account_index = (account_index + 1) % len(current_pair)
+                        print(f"Error with {curr_name}: {e}")
+
+                    if not use_pair:
+                        print("Single mode running continuously... (Ctrl+C to stop)")
+                        await asyncio.sleep(3600)  # Keep running
+                    else:
+                        account_index = (account_index + 1) % len(current_accounts)
             except KeyboardInterrupt:
-                print("\nStopped by user.")
+                print("\n🛑 Stopped.")
 
         elif choice == "0":
             print("Thank you for using SPYTHER v1!")
             break
-
         else:
             print("Invalid option.")
 
