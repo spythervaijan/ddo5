@@ -27,13 +27,13 @@ PAIRS_FILE = "account_pairs.json"
 def print_spyther_banner():
     if render:
         try:
-            output = render('SPYTHER v1', font='block', colors=['cyan', 'yellow'], align='center')
+            output = render('SPYTHER', font='block', colors=['cyan', 'yellow'], align='center')
             print(output)
         except:
             pass
     print("═" * 85)
-    print("              SPYTHER v1 - Instagram DM Auto Sender")
-    print("                 Full Storage State + Session ID Test")
+    print("              SPYTHER v1 - Instagram Spam")
+    print("                 Made with love")
     print("═" * 85)
 
 def load_accounts():
@@ -91,6 +91,14 @@ async def test_sessionid(sessionid: str):
             page = await context.new_page()
             await page.goto("https://www.instagram.com/", timeout=60000)
             await asyncio.sleep(8)  # Important wait
+
+            # 👇 BAS YE ADD KIYA
+            save_sel = 'div[role="button"]:has-text("Save info")'
+            try:
+                await page.locator(save_sel).click(timeout=5000)
+                print("💾 Save info clicked")
+            except:
+                pass
 
             # Check login status
             login_count = await page.locator("text=Log in").count()
@@ -203,12 +211,12 @@ async def main():
         print("\n" + "═"*80)
         print("                    SPYTHER v1 - MAIN MENU")
         print("═"*80)
-        print("1. Add New Account (Session ID → Full State)")
+        print("1. Add New Account (Session ID)")
         print("2. List Saved Accounts")
         print("3. Create Account Pair")
         print("4. Manage Pairs")
         print("5. Set Switch Interval")
-        print("6. Start Sender")
+        print("6. Start Spam")
         print("0. Exit")
         print("═"*80)
 
@@ -224,7 +232,7 @@ async def main():
 
             success, state = await test_sessionid(sessionid)
             if not success or not state:
-                print("❌ Test FAILED - Redirected to login. Fresh sessionid use kar.")
+                print("❌ Test FAILED - Redirected to login.")
                 continue
 
             accounts[name] = {
@@ -245,7 +253,7 @@ async def main():
 
         elif choice == "3":
             if not accounts:
-                print("Pehle account add kar.")
+                print("FIRST ADD ACCOUNT.")
                 continue
             acc_list = list(accounts.keys())
             for i, n in enumerate(acc_list, 1):
