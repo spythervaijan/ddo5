@@ -64,19 +64,12 @@ def save_pairs(pairs):
 
 # ==================== TERA STYLE SESSION TEST ====================
 async def test_sessionid(sessionid: str):
-    """Tere diye code jaisa - sessionid test + full storage_state"""
-    print("🔄 Testing sessionid with Playwright (8-10 seconds wait)...")
+    print("🔄 Testing sessionid with Playwright...")
+
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False, args=LAUNCH_ARGS)
-            context = await browser.new_context(
-                user_agent=MOBILE_UA,
-                viewport=MOBILE_VIEWPORT,
-                is_mobile=True,
-                has_touch=True,
-                device_scale_factor=2,
-                color_scheme="dark"
-            )
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
 
             await context.add_cookies([{
                 "name": "sessionid",
@@ -84,31 +77,19 @@ async def test_sessionid(sessionid: str):
                 "domain": ".instagram.com",
                 "path": "/",
                 "httpOnly": True,
-                "secure": True,
-                "sameSite": "Lax"
+                "secure": True
             }])
 
             page = await context.new_page()
             await page.goto("https://www.instagram.com/", timeout=60000)
-            await asyncio.sleep(8)  # Important wait
+            await asyncio.sleep(8)
 
-            # 👇 BAS YE ADD KIYA
-            save_sel = 'div[role="button"]:has-text("Save info")'
-            try:
-                await page.locator(save_sel).click(timeout=5000)
-                print("💾 Save info clicked")
-            except:
-                pass
-
-            # Check login status
-            login_count = await page.locator("text=Log in").count()
-            success = login_count == 0
-
-            # Save full storage state
+            success = await page.locator("text=Log in").count() == 0
             state = await context.storage_state()
 
             await browser.close()
             return success, state
+
     except Exception as e:
         print(f"Test error: {e}")
         return False, None
